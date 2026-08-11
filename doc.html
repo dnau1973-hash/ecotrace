@@ -25,13 +25,14 @@
 </head>
 <body>
 
-<div class="container">   
+<div class="container">
+    <a href="index.php" class="btn-back">⬅ Retour à l'application</a>
 
     <h1>Documentation Technique et Utilisateur : EcoTrace 🍃</h1>
 
     <div class="meta-info">
         <strong>Projet :</strong> Moteur de qualification RSE, calcul d'empreinte carbone Scope 3 et analyse du risque<br>
-        <strong>Version :</strong> 1.4.1 (Août 2026)<br>
+        <strong>Version :</strong> 1.5.1 (Août 2026)<br>
         <strong>Environnement :</strong> Docker / ZimaOS / LAMP (PHP 8.2, Apache, MySQL 8.0)<br>
         <strong>Auteur :</strong> David NAU
     </div>
@@ -45,6 +46,7 @@
         <li>Détection des labels RSE : Secteur Alimentaire, ESS (Économie Sociale et Solidaire), Société à Mission.</li>
         <li>Calculateur d'émissions de CO2 estimées (Ratios monétaires ADEME par NAF + Fret Tonnes-Kilomètres).</li>
         <li>Module d'analyse du risque financier avec modale interactive d'affichage des annonces légales BODACC.</li>
+        <li>Mise à jour "Over-The-Air" (Auto-Updater) via synchronisation avec un dépôt GitHub.</li>
         <li>Dashboard RSE interactif avec cartes mondiales (Leaflet) et graphiques analytiques (Chart.js).</li>
     </ul>
 
@@ -56,6 +58,7 @@
         <li><code>ORIGIN_LAT</code>, <code>ORIGIN_LON</code> : Coordonnées GPS du siège/entrepôt d'origine.</li>
         <li><code>PAPPERS_API_KEY</code> : (Optionnel) Clé API Pappers pour la recherche par enseigne.</li>
         <li><code>SOCIETE_API_KEY</code> : (Optionnel) Clé API Societe.com / SocieteInfo.</li>
+        <li><code>GITHUB_REPO</code> : URL du dépôt pour les mises à jour automatiques. Pour un dépôt privé, l'URL doit inclure un Personal Access Token (PAT) sous la forme : <code>https://ghp_VOTRE_TOKEN_SECRET@github.com/votre-compte/ecotrace.git</code></li>
     </ul>
 
     <h2>3. Analyse du Risque et Modale BODACC</h2>
@@ -102,38 +105,46 @@
         Copiez-collez le code ci-dessous dans le module "Custom Install" de ZimaOS ou dans un fichier <code>docker-compose.yml</code> classique.
     </div>
 
-<pre><code>version: '3.8'
-
+<pre><code>name: ecotrace
 services:
   web:
     image: php:8.2-apache
+    container_name: ecotrace_web
+    restart: always
     ports:
-      - "8080:80"
+      - "8083:80"
     volumes:
-      - ./:/var/www/html
+      - /DATA/AppData/ecotrace:/var/www/html
+    command: >
+      /bin/bash -c "apt-get update &&
+      apt-get install -y git &&
+      docker-php-ext-install pdo pdo_mysql &&
+      git config --system --add safe.directory '*' &&
+      chown -R www-data:www-data /var/www/html &&
+      apache2-foreground"
     depends_on:
       - db
-    # Installation à la volée des extensions PHP requises
-    command: >
-      bash -c "docker-php-ext-install pdo pdo_mysql && apache2-foreground"
-
+  
   db:
     image: mysql:8.0
+    container_name: ecotrace_db
+    restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: VotreMotDePasseSecret!
-      MYSQL_DATABASE: ecotrace
+      MYSQL_ROOT_PASSWORD: "VotreMotDePasseSecret!"
+      MYSQL_DATABASE: "ecotrace"
     volumes:
       - ecotrace_db_data:/var/lib/mysql
 
 volumes:
-  ecotrace_db_data:</code></pre>
+  ecotrace_db_data:
+    driver: local</code></pre>
 
     <h3>B. Installation sur un serveur Apache standard (LAMP / WAMP / XAMPP)</h3>
     <ol>
-        <li><strong>Prérequis :</strong> Un serveur web avec Apache, PHP 8.1 ou supérieur (avec les extensions <code>pdo_mysql</code> et <code>curl</code> activées), et un serveur MySQL ou MariaDB fonctionnel.</li>
+        <li><strong>Prérequis :</strong> Un serveur web avec Apache, PHP 8.1 ou supérieur (avec les extensions <code>pdo_mysql</code> et <code>curl</code> activées), le paquet <code>git</code> installé sur la machine hôte, et un serveur MySQL ou MariaDB fonctionnel.</li>
         <li><strong>Déploiement :</strong> Copiez tous les fichiers du projet (<code>index.php</code>, <code>doc.html</code>, <code>licence.html</code>, <code>presentation.html</code>, <code>historique.html</code>) dans le répertoire public de votre serveur web (ex: <code>/var/www/html/ecotrace</code>).</li>
-        <li><strong>Permissions :</strong> Assurez-vous que l'utilisateur exécutant Apache (souvent <code>www-data</code> sous Linux) possède les droits d'écriture sur ce dossier. L'application a besoin de ce droit pour créer le fichier <code>.env</code> lors de la configuration initiale.</li>
-        <li><strong>Lancement :</strong> Ouvrez votre navigateur et accédez à l'URL correspondante (ex: <code>http://localhost/ecotrace/</code>). L'assistant de configuration s'affichera pour relier la base de données (si le fichier <code>.env</code> n'est pas encore créé).</li>
+        <li><strong>Permissions :</strong> Assurez-vous que l'utilisateur exécutant Apache (souvent <code>www-data</code> sous Linux) possède les droits d'écriture sur ce dossier. L'application a besoin de ce droit pour créer le fichier <code>.env</code> et pour exécuter les commandes <code>git reset --hard</code> lors des mises à jour automatiques.</li>
+        <li><strong>Lancement :</strong> Ouvrez votre navigateur et accédez à l'URL correspondante (ex: <code>http://localhost/ecotrace/</code>). L'assistant de configuration s'affichera pour relier la base de données.</li>
     </ol>
 
 </div>
