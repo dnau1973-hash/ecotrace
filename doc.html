@@ -21,6 +21,7 @@
         .btn-back { display: inline-block; margin-bottom: 20px; padding: 10px 15px; background-color: #34495e; color: #fff; text-decoration: none; border-radius: 4px; font-weight: bold; }
         .btn-back:hover { background-color: #2c3e50; }
         .zimaos-note { background-color: #e8f4fd; border-left: 4px solid #3498db; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
+        .warning-note { background-color: #fdf2e9; border-left: 4px solid #e67e22; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
     </style>
 </head>
 <body>
@@ -32,7 +33,7 @@
 
     <div class="meta-info">
         <strong>Projet :</strong> Moteur de qualification RSE, calcul d'empreinte carbone Scope 3 et analyse du risque<br>
-        <strong>Version :</strong> 1.5.1 (Août 2026)<br>
+        <strong>Version :</strong> 1.5.3 (Août 2026)<br>
         <strong>Environnement :</strong> Docker / ZimaOS / LAMP (PHP 8.2, Apache, MySQL 8.0)<br>
         <strong>Auteur :</strong> David NAU
     </div>
@@ -58,7 +59,7 @@
         <li><code>ORIGIN_LAT</code>, <code>ORIGIN_LON</code> : Coordonnées GPS du siège/entrepôt d'origine.</li>
         <li><code>PAPPERS_API_KEY</code> : (Optionnel) Clé API Pappers pour la recherche par enseigne.</li>
         <li><code>SOCIETE_API_KEY</code> : (Optionnel) Clé API Societe.com / SocieteInfo.</li>
-        <li><code>GITHUB_REPO</code> : URL du dépôt pour les mises à jour automatiques. Pour un dépôt privé, l'URL doit inclure un Personal Access Token (PAT) sous la forme : <code>https://ghp_VOTRE_TOKEN_SECRET@github.com/votre-compte/ecotrace.git</code></li>
+        <li><code>GITHUB_REPO</code> : URL du dépôt pour les mises à jour automatiques (voir Section 7).</li>
     </ul>
 
     <h2>3. Analyse du Risque et Modale BODACC</h2>
@@ -142,10 +143,47 @@ volumes:
     <h3>B. Installation sur un serveur Apache standard (LAMP / WAMP / XAMPP)</h3>
     <ol>
         <li><strong>Prérequis :</strong> Un serveur web avec Apache, PHP 8.1 ou supérieur (avec les extensions <code>pdo_mysql</code> et <code>curl</code> activées), le paquet <code>git</code> installé sur la machine hôte, et un serveur MySQL ou MariaDB fonctionnel.</li>
-        <li><strong>Déploiement :</strong> Copiez tous les fichiers du projet (<code>index.php</code>, <code>doc.html</code>, <code>licence.html</code>, <code>presentation.html</code>, <code>historique.html</code>) dans le répertoire public de votre serveur web (ex: <code>/var/www/html/ecotrace</code>).</li>
-        <li><strong>Permissions :</strong> Assurez-vous que l'utilisateur exécutant Apache (souvent <code>www-data</code> sous Linux) possède les droits d'écriture sur ce dossier. L'application a besoin de ce droit pour créer le fichier <code>.env</code> et pour exécuter les commandes <code>git reset --hard</code> lors des mises à jour automatiques.</li>
-        <li><strong>Lancement :</strong> Ouvrez votre navigateur et accédez à l'URL correspondante (ex: <code>http://localhost/ecotrace/</code>). L'assistant de configuration s'affichera pour relier la base de données.</li>
+        <li><strong>Déploiement :</strong> Copiez tous les fichiers du projet dans le répertoire public de votre serveur web (ex: <code>/var/www/html/ecotrace</code>).</li>
+        <li><strong>Permissions :</strong> Assurez-vous que l'utilisateur exécutant Apache possède les droits d'écriture sur ce dossier.</li>
+        <li><strong>Lancement :</strong> Ouvrez votre navigateur et accédez à l'URL correspondante. L'assistant de configuration s'affichera pour paramétrer le fichier <code>.env</code>.</li>
     </ol>
+
+    <h2>7. Mises à jour automatiques et Token GitHub</h2>
+    <p>EcoTrace intègre un système "Auto-Updater" qui lui permet de vérifier la disponibilité d'une nouvelle version sur un dépôt GitHub et de s'auto-mettre à jour en un clic (en utilisant la commande <code>git reset --hard</code>). Étant donné que le dépôt est privé, il est nécessaire de générer un <strong>Personal Access Token (PAT)</strong> sur GitHub pour autoriser EcoTrace à s'y connecter en silence.</p>
+    
+    <div class="warning-note">
+        <strong>⚠️ Règle de Sécurité Absolue :</strong><br>
+        Le jeton secret ne doit <strong>jamais</strong> être écrit dans le code source de l'application (sous peine d'être bloqué par la sécurité "Push Protection" de GitHub). Il doit être inséré uniquement via l'interface de configuration d'EcoTrace, qui le stockera dans le fichier local caché <code>.env</code> (ignoré par Git grâce au fichier <code>.gitignore</code>).
+    </div>
+
+    <h3>Étape 1 : Générer le Jeton (Token) sur GitHub</h3>
+    <ol>
+        <li>Connectez-vous à votre compte sur <a href="https://github.com" target="_blank" style="color: #3498db; text-decoration: none;">GitHub</a>.</li>
+        <li>Cliquez sur votre photo de profil (en haut à droite), puis allez dans <strong>Settings (Paramètres)</strong>.</li>
+        <li>Dans le menu de gauche, descendez tout en bas et cliquez sur <strong>Developer settings</strong>.</li>
+        <li>Déroulez la section <strong>Personal access tokens</strong> et choisissez <strong>Tokens (classic)</strong>.</li>
+        <li>Cliquez sur <strong>Generate new token (classic)</strong>.</li>
+        <li>Remplissez les informations :
+            <ul>
+                <li><strong>Note :</strong> <code>Auto-Updater EcoTrace</code></li>
+                <li><strong>Expiration :</strong> <code>No expiration</code> (Recommandé pour ne pas casser l'auto-updater).</li>
+                <li><strong>Scopes :</strong> Cochez <u>uniquement</u> la case <strong><code>repo</code></strong> (permet de lire votre dépôt privé).</li>
+            </ul>
+        </li>
+        <li>Cliquez sur le bouton vert <strong>Generate token</strong> tout en bas.</li>
+        <li><strong>Copiez immédiatement</strong> la chaîne de caractères verte (ex: <code>ghp_A1b2C3d4...</code>). GitHub ne la réaffichera plus !</li>
+    </ol>
+
+    <h3>Étape 2 : Configurer le lien dans EcoTrace</h3>
+    <p>L'URL standard de votre dépôt ressemble à :<br><code>https://github.com/votre-compte/ecotrace.git</code></p>
+    <p>Pour y inclure l'autorisation silencieuse, ajoutez votre jeton suivi d'un <code>@</code> juste avant <code>github.com</code> :<br>
+    <code style="word-break: break-all;">https://ghp_A1b2C3d4...@github.com/votre-compte/ecotrace.git</code></p>
+    <ol>
+        <li>Ouvrez EcoTrace, ouvrez le menu <strong>⚙️ Actions ▾</strong> et cliquez sur <strong>⚙️ Éditer la configuration</strong>.</li>
+        <li>Collez cette URL modifiée dans le champ <strong>Lien dépôt GitHub (Auto-Updater)</strong>.</li>
+        <li>Cliquez sur <strong>💾 Enregistrer et Continuer</strong>.</li>
+    </ol>
+    <p>Désormais, EcoTrace vérifiera automatiquement la disponibilité des mises à jour (un badge clignotant rouge <em>"Mise à jour disponible !"</em> s'affichera à côté du numéro de version si nécessaire).</p>
 
 </div>
 
