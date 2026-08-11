@@ -1,0 +1,51 @@
+name: ecotrace
+services:
+  web:
+    image: php:8.2-apache
+    container_name: ecotrace_web
+    restart: always
+    ports:
+      - "8083:80"
+    volumes:
+      # /!\ ATTENTION : Assure-toi que ce chemin correspond bien au dossier où se trouve index.php
+      - /DATA/AppData/ecotrace:/var/www/html
+    # La ligne ci-dessous installe Git (Auto-Updater), MySQL, donne les permissions au dossier, puis lance Apache
+    command: >
+      /bin/bash -c "apt-get update &&
+      apt-get install -y git &&
+      docker-php-ext-install pdo pdo_mysql &&
+      git config --system --add safe.directory '*' &&
+      chown -R www-data:www-data /var/www/html &&
+      apache2-foreground"
+    depends_on:
+      - db
+  
+  db:
+    image: mysql:8.0
+    container_name: ecotrace_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: "Gabriel125#"
+      MYSQL_DATABASE: "ecotrace"
+    volumes:
+      - ecotrace_db_data:/var/lib/mysql
+
+volumes:
+  ecotrace_db_data:
+    driver: local
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: ecotrace_web
+  author: "EcoTrace"
+  description:
+    en_us: "Carbon footprint management application."
+    fr_fr: "Application de gestion de l'empreinte carbone et rapprochement d'entreprises."
+  title:
+    fr_fr: "EcoTrace"
+    en_us: "EcoTrace"
+  icon: "https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/1f343.svg"
+  port_map: "8083"
+  index: "/"

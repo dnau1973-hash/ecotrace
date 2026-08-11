@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Présentation - EcoTrace 🍃 v1.5.0</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/theme/simple.min.css">
+    <style>
+        .reveal h1, .reveal h2, .reveal h3 { color: #27ae60; font-family: 'Segoe UI', sans-serif; text-transform: none; }
+        .reveal ul { font-size: 0.8em; line-height: 1.4; }
+        .reveal li { margin-bottom: 15px; }
+        .accent { color: #27ae60; font-weight: bold; }
+        .accent-blue { color: #3498db; font-weight: bold; }
+        .accent-purple { color: #9b59b6; font-weight: bold; }
+        .footer-name { position: absolute; bottom: 20px; left: 20px; font-size: 0.4em; color: #888; z-index: 1000;}
+    </style>
+</head>
+<body>
+    <div class="reveal">
+        <div class="slides">
+            
+            <!-- Diapositive 1 : Titre -->
+            <section>
+                <h1 style="font-size: 2.8em;">EcoTrace 🍃</h1>
+                <h3>Qualifier nos partenaires, mesurer notre bilan carbone (Scope 3) & maîtriser les risques.</h3>
+                <p style="margin-top: 40px; font-size: 0.8em;">Présentation Direction — <strong>v1.4.0</strong></p>
+                <p style="font-size: 0.6em; color: #7f8c8d;">Par David NAU</p>
+            </section>
+
+            <!-- Diapositive 2 : Le Constat -->
+            <section>
+                <h2>Le Constat & Les Enjeux</h2>
+                <ul style="text-align: left;">
+                    <li><span class="accent">Exigence RSE & Scope 3 :</span> Obligation de mesurer l'impact carbone de nos achats et du fret.</li>
+                    <li><span class="accent">Base de données hétérogène :</span> Les fichiers fournisseurs/clients CSV contiennent des fautes de frappe et manquent de numéros SIREN/NAF.</li>
+                    <li><span class="accent">Risque de défaillance :</span> Nécessité d'anticiper les faillites fournisseurs pour sécuriser la chaîne d'approvisionnement.</li>
+                </ul>
+            </section>
+
+            <!-- Diapositive 3 : La Solution EcoTrace -->
+            <section>
+                <h2>La Solution EcoTrace 🍃</h2>
+                <p style="font-size: 0.7em; color: #555;">Une plateforme interne souveraine d'enrichissement et d'analyse RSE</p>
+                <ul style="text-align: left; margin-top: 20px;">
+                    <li><span class="accent">Multi-API :</span> Connexion aux bases de l'État (INSEE, BODACC), Pappers & Societe.com.</li>
+                    <li><span class="accent">Automatique :</span> Traitement par lots de fichiers CSV complexes en quelques secondes.</li>
+                    <li><span class="accent">Sécurisé :</span> Hébergement interne conteneurisé (Docker), souveraineté totale de nos données.</li>
+                </ul>
+            </section>
+
+            <!-- Diapositive 4 : Fonctionnalités Clés -->
+            <section>
+                <h2>Fonctionnalités Clés (v1.4.0)</h2>
+                <ul style="text-align: left;">
+                    <li>🌍 <span class="accent">Calculateur CO2 Scope 3 :</span> Estimation basée sur les ratios monétaires ADEME (par NAF) et le Fret (Tonne-Kilomètre OSRM).</li>
+                    <li>🤝 <span class="accent-purple">Labels RSE :</span> Détection automatique des structures ESS et Sociétés à Mission.</li>
+                    <li>🏥 <span class="accent-blue">Analyse du Risque BODACC :</span> Badges cliquables ouvrant le détail officiel des annonces légales de faillite/redressement.</li>
+                    <li>💾 <span class="accent">Sauvegardes Dump SQL :</span> Exportation et restauration de la base en un clic.</li>
+                </ul>
+            </section>
+
+            <!-- Diapositive 5 : Dashboard -->
+            <section>
+                <h2>Tableau de Bord & Reporting RSE</h2>
+                <ul style="text-align: left;">
+                    <li>📊 <span class="accent">Indicateurs KPI :</span> Empreinte carbone globale de nos partenaires en kgCO2.</li>
+                    <li>🗺️ <span class="accent">Cartographie globale :</span> Visualisation géographique mondiale de nos fournisseurs sur carte Leaflet.</li>
+                    <li>📈 <span class="accent">Graphiques analytiques :</span> Répartition par secteur d'activité et santé financière de la chaîne d'achats.</li>
+                </ul>
+            </section>
+
+            <!-- Diapositive 6 : Socle Technique -->
+            <section>
+                <h2>Socle Technique & Souveraineté</h2>
+                <ul style="text-align: left;">
+                    <li>🏛️ <span class="accent">API Gratuites & Partenaires :</span> Exploitation prioritaire de l'OpenData public pour un coût d'exploitation nul.</li>
+                    <li>🐳 <span class="accent">Architecture Docker :</span> Déploiement instantané (ZimaOS / LAMP) sans conflit d'infrastructure.</li>
+                    <li>🐘 <span class="accent">Pérennité Open Source :</span> Développé en PHP 8.2 / MySQL, garantissant une indépendance totale.</li>
+                </ul>
+            </section>
+
+            <!-- Diapositive 7 : Conclusion -->
+            <section>
+                <h1>Prêt pour la démonstration ! 🚀</h1>
+                <p style="margin-top: 30px; color: #555;">EcoTrace v1.4.0 est pleinement opérationnel.</p>
+            </section>
+
+        </div>
+        <div class="footer-name">EcoTrace 🍃 v1.4.0 — David NAU</div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.js"></script>
+    <script>
+        Reveal.initialize({ controls: true, progress: true, center: true, hash: true, transition: 'slide' });
+    </script>
+</body>
+</html>
