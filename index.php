@@ -1,6 +1,6 @@
 <?php
 /**
- * EcoTrace 🍃 - Version 1.5.1
+ * EcoTrace 🍃 - Version 1.5.3
  * 
  * Copyright (C) 2026 David NAU <dnau.1973@gmail.com>
  * 
@@ -45,7 +45,7 @@ $admin_user = $env['ADMIN_USER'] ?? 'admin';
 $admin_pass = $env['ADMIN_PASS'] ?? 'admin';
 $pappers_key = trim($env['PAPPERS_API_KEY'] ?? '');
 $societe_key = trim($env['SOCIETE_API_KEY'] ?? '');
-// URL GitHub intégrée par défaut
+// URL GitHub intégrée par défaut SANS le token (sécurité)
 $github_repo = trim($env['GITHUB_REPO'] ?? 'https://github.com/dnau1973-hash/ecotrace.git');
 $origineLat = $env['ORIGIN_LAT'] ?? 45.19165526;
 $origineLon = $env['ORIGIN_LON'] ?? 0.76262712;
@@ -80,7 +80,7 @@ if (!file_exists($envFile) || $is_editing_config) {
     <body>
         <div class="install-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.5.1</div>
+            <div class="app-version">Version 1.5.3</div>
             <p style="text-align:center; color:#666;"><?= $is_editing_config ? "Modification des paramètres de configuration." : "Veuillez configurer les paramètres avant l'installation." ?></p>
             <form method="POST" action="?">
                 <input type="hidden" name="setup_env_action" value="1">
@@ -105,7 +105,7 @@ if (!file_exists($envFile) || $is_editing_config) {
                 </div>
                 <h2>🔑 Clés API et Auto-Updater</h2>
                 <div class="row">
-                    <div class="form-group"><label>Lien dépôt GitHub (Auto-Updater)</label><input type="text" name="github_repo" value="<?= htmlspecialchars($github_repo) ?>" placeholder="Ex: https://github.com/.../ecotrace.git"></div>
+                    <div class="form-group"><label>Lien dépôt GitHub (Auto-Updater)</label><input type="text" name="github_repo" value="<?= htmlspecialchars($github_repo) ?>" placeholder="Ex: https://ghp_XXXX@github.com/.../ecotrace.git"></div>
                 </div>
                 <div class="row">
                     <div class="form-group"><label>Clé API Pappers</label><input type="text" name="pappers_api_key" value="<?= htmlspecialchars($pappers_key) ?>" placeholder="Ex: a1b2c3d4e5f6..."></div>
@@ -159,7 +159,7 @@ if (empty($_SESSION['ecotrace_logged_in'])) {
     <body>
         <div class="login-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.5.1</div>
+            <div class="app-version">Version 1.5.3</div>
             <p>Veuillez vous identifier</p>
             <?php if (isset($login_error)) echo "<div class='error'>$login_error</div>"; ?>
             <form method="POST">
@@ -202,11 +202,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     exit;
 }
 
-// Exécuter la mise à jour
+// Exécuter la mise à jour avec protection du .env
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'do_github_update') {
     header('Content-Type: application/json');
     if (empty($github_repo)) { echo json_encode(['success' => false, 'message' => 'Le lien GitHub n\'est pas configuré.']); exit; }
     
+    // ÉTAPE DE SÉCURITÉ : Lire et mémoriser le fichier .env avant toute action Git
+    $env_backup = file_exists($envFile) ? file_get_contents($envFile) : false;
+
     shell_exec('git config --global --add safe.directory /var/www/html');
     
     if (!is_dir('.git')) {
@@ -216,6 +219,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     
     shell_exec('git fetch origin main 2>&1');
     $output = shell_exec('git reset --hard origin/main 2>&1');
+    
+    // ÉTAPE DE SÉCURITÉ : Restaurer le fichier .env immédiatement
+    if ($env_backup !== false) {
+        file_put_contents($envFile, $env_backup);
+    }
     
     echo json_encode(['success' => true, 'message' => "Mise à jour téléchargée et appliquée avec succès !<br>L'application va redémarrer."]);
     exit;
@@ -846,7 +854,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         <div class="header-top">
             <div class="header-title">
                 <h1>EcoTrace 🍃</h1>
-                <div class="app-version-main">v1.5.1</div>
+                <div class="app-version-main">v1.5.3</div>
                 <div id="update-badge" class="update-badge" onclick="verifierMiseAJour()">⚠️ Mise à jour disponible !</div>
             </div>
             <div class="header-actions">
