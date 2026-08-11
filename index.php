@@ -1,6 +1,6 @@
 <?php
 /**
- * EcoTrace 🍃 - Version 1.5.0
+ * EcoTrace 🍃 - Version 1.5.1
  * 
  * Copyright (C) 2026 David NAU <dnau.1973@gmail.com>
  * 
@@ -45,7 +45,8 @@ $admin_user = $env['ADMIN_USER'] ?? 'admin';
 $admin_pass = $env['ADMIN_PASS'] ?? 'admin';
 $pappers_key = trim($env['PAPPERS_API_KEY'] ?? '');
 $societe_key = trim($env['SOCIETE_API_KEY'] ?? '');
-$github_repo = trim($env['GITHUB_REPO'] ?? '');
+// URL GitHub intégrée par défaut
+$github_repo = trim($env['GITHUB_REPO'] ?? 'https://github.com/dnau1973-hash/ecotrace.git');
 $origineLat = $env['ORIGIN_LAT'] ?? 45.19165526;
 $origineLon = $env['ORIGIN_LON'] ?? 0.76262712;
 
@@ -79,7 +80,7 @@ if (!file_exists($envFile) || $is_editing_config) {
     <body>
         <div class="install-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.5.0</div>
+            <div class="app-version">Version 1.5.1</div>
             <p style="text-align:center; color:#666;"><?= $is_editing_config ? "Modification des paramètres de configuration." : "Veuillez configurer les paramètres avant l'installation." ?></p>
             <form method="POST" action="?">
                 <input type="hidden" name="setup_env_action" value="1">
@@ -158,7 +159,7 @@ if (empty($_SESSION['ecotrace_logged_in'])) {
     <body>
         <div class="login-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.5.0</div>
+            <div class="app-version">Version 1.5.1</div>
             <p>Veuillez vous identifier</p>
             <?php if (isset($login_error)) echo "<div class='error'>$login_error</div>"; ?>
             <form method="POST">
@@ -174,7 +175,7 @@ if (empty($_SESSION['ecotrace_logged_in'])) {
 }
 
 // =========================================================================
-// 2.5 AUTO-UPDATER GITHUB (v1.5.0)
+// 2.5 AUTO-UPDATER GITHUB
 // =========================================================================
 
 // Vérifier la mise à jour
@@ -182,7 +183,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     header('Content-Type: application/json');
     if (empty($github_repo)) { echo json_encode(['success' => false, 'message' => 'Le lien du dépôt GitHub n\'est pas configuré dans les paramètres.']); exit; }
     
-    // On force la permission locale pour Git
     shell_exec('git config --global --add safe.directory /var/www/html');
     
     if (!is_dir('.git')) {
@@ -209,15 +209,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     
     shell_exec('git config --global --add safe.directory /var/www/html');
     
-    // Si c'est le premier lancement, on initialise le dossier en dépôt Git
     if (!is_dir('.git')) {
         shell_exec('git init');
         shell_exec('git remote add origin ' . escapeshellarg($github_repo));
     }
     
     shell_exec('git fetch origin main 2>&1');
-    // Le reset --hard remplace les fichiers locaux par ceux de GitHub
-    // ATTENTION: Assurez-vous d'avoir un fichier .gitignore contenant ".env" sur votre Github !
     $output = shell_exec('git reset --hard origin/main 2>&1');
     
     echo json_encode(['success' => true, 'message' => "Mise à jour téléchargée et appliquée avec succès !<br>L'application va redémarrer."]);
@@ -733,53 +730,6 @@ foreach ($sourcesValides as $v) {
     if ($v['latitude'] && $v['longitude']) { $mapMarkers[] = ['lat' => $v['latitude'], 'lon' => $v['longitude'], 'nom' => htmlspecialchars(addslashes($v['nom_complet'])), 'alim' => $v['est_alimentaire']]; }
 }
 arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
-
-// =========================================================================
-// 2.5 AUTO-UPDATER GITHUB
-// =========================================================================
-
-// Vérifier la mise à jour
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'check_github_update') {
-    header('Content-Type: application/json');
-    if (empty($github_repo)) { echo json_encode(['success' => false, 'message' => 'Le lien du dépôt GitHub n\'est pas configuré dans les paramètres.']); exit; }
-    
-    shell_exec('git config --global --add safe.directory /var/www/html');
-    
-    if (!is_dir('.git')) {
-        echo json_encode(['success' => true, 'update_available' => true, 'message' => 'L\'application n\'est pas encore synchronisée avec GitHub.<br>Cliquez sur le bouton ci-dessous pour initialiser la connexion.']);
-        exit;
-    }
-    
-    shell_exec('git fetch origin main 2>&1');
-    $local = trim(shell_exec('git rev-parse HEAD 2>/dev/null'));
-    $remote = trim(shell_exec('git rev-parse origin/main 2>/dev/null'));
-    
-    if ($local !== $remote && !empty($remote)) {
-        echo json_encode(['success' => true, 'update_available' => true, 'message' => "✨ Une nouvelle version est disponible sur GitHub !<br><br><span style='font-size:12px;color:#7f8c8d;'>Votre version : " . substr($local, 0, 7) . "<br>Nouvelle version : " . substr($remote, 0, 7) . "</span>"]);
-    } else {
-        echo json_encode(['success' => true, 'update_available' => false, 'message' => '✅ Votre application est déjà à jour par rapport à GitHub !']);
-    }
-    exit;
-}
-
-// Exécuter la mise à jour
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'do_github_update') {
-    header('Content-Type: application/json');
-    if (empty($github_repo)) { echo json_encode(['success' => false, 'message' => 'Le lien GitHub n\'est pas configuré.']); exit; }
-    
-    shell_exec('git config --global --add safe.directory /var/www/html');
-    
-    if (!is_dir('.git')) {
-        shell_exec('git init');
-        shell_exec('git remote add origin ' . escapeshellarg($github_repo));
-    }
-    
-    shell_exec('git fetch origin main 2>&1');
-    $output = shell_exec('git reset --hard origin/main 2>&1');
-    
-    echo json_encode(['success' => true, 'message' => "Mise à jour téléchargée et appliquée avec succès !<br>L'application va redémarrer."]);
-    exit;
-}
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -798,6 +748,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         .header-title { display: flex; flex-direction: column; align-items: flex-start; }
         h1 { font-family: 'Fredoka', sans-serif; color: #27ae60; margin: 0; font-size: 32px; line-height: 1; }
         .app-version-main { font-size: 14px; color: #7f8c8d; font-weight: bold; margin-top: 2px; }
+
+        /* Animation Clignotante pour le badge de mise à jour */
+        @keyframes blinker { 50% { opacity: 0; } }
+        .update-badge { display: none; color: #e74c3c; font-weight: bold; font-size: 12px; margin-top: 5px; cursor: pointer; animation: blinker 1.5s linear infinite; background: #fadbd8; padding: 2px 8px; border-radius: 12px; }
+        .update-badge:hover { background: #f5b7b1; }
 
         #scrollTopBtn { display: none; position: fixed; bottom: 30px; right: 30px; z-index: 99; font-size: 22px; border: none; outline: none; background-color: #27ae60; color: white; cursor: pointer; padding: 10px; border-radius: 50%; width: 50px; height: 50px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: background-color 0.3s, transform 0.3s; font-family: 'Nunito', sans-serif; }
         #scrollTopBtn:hover { background-color: #219150; transform: scale(1.1); }
@@ -891,7 +846,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         <div class="header-top">
             <div class="header-title">
                 <h1>EcoTrace 🍃</h1>
-                <div class="app-version-main">v1.5.0</div>
+                <div class="app-version-main">v1.5.1</div>
+                <div id="update-badge" class="update-badge" onclick="verifierMiseAJour()">⚠️ Mise à jour disponible !</div>
             </div>
             <div class="header-actions">
                 <input type="file" id="csv-upload" accept=".csv" style="display: none;" onchange="demarrerImportCSV(event)">
@@ -1405,6 +1361,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 document.getElementById('update-content').innerHTML = "<span style='color:#e74c3c;'>Échec critique de la mise à jour.</span>";
             }
         }
+        
+        // Vérification silencieuse de la mise à jour au chargement
+        async function silentUpdateCheck() {
+            let f = new FormData(); f.append('action', 'check_github_update');
+            try {
+                let r = await fetch('', {method: 'POST', body: f});
+                let d = await r.json();
+                if (d.success && d.update_available) {
+                    document.getElementById('update-badge').style.display = 'inline-block';
+                }
+            } catch(e) {}
+        }
+        window.addEventListener('load', () => setTimeout(silentUpdateCheck, 2000));
 
         // Fonctions pour la Modale Iframe (Documentation, Historique...)
         function ouvrirIframeModal(url) {
