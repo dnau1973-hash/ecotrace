@@ -1,6 +1,6 @@
 <?php
 /**
- * EcoTrace 🍃 - Version 1.5.3
+ * EcoTrace 🍃 - Version 1.5.4
  * 
  * Copyright (C) 2026 David NAU <dnau.1973@gmail.com>
  * 
@@ -80,7 +80,7 @@ if (!file_exists($envFile) || $is_editing_config) {
     <body>
         <div class="install-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.5.3</div>
+            <div class="app-version">Version 1.5.4</div>
             <p style="text-align:center; color:#666;"><?= $is_editing_config ? "Modification des paramètres de configuration." : "Veuillez configurer les paramètres avant l'installation." ?></p>
             <form method="POST" action="?">
                 <input type="hidden" name="setup_env_action" value="1">
@@ -159,7 +159,7 @@ if (empty($_SESSION['ecotrace_logged_in'])) {
     <body>
         <div class="login-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.5.3</div>
+            <div class="app-version">Version 1.5.4</div>
             <p>Veuillez vous identifier</p>
             <?php if (isset($login_error)) echo "<div class='error'>$login_error</div>"; ?>
             <form method="POST">
@@ -207,7 +207,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     header('Content-Type: application/json');
     if (empty($github_repo)) { echo json_encode(['success' => false, 'message' => 'Le lien GitHub n\'est pas configuré.']); exit; }
     
-    // ÉTAPE DE SÉCURITÉ : Lire et mémoriser le fichier .env avant toute action Git
     $env_backup = file_exists($envFile) ? file_get_contents($envFile) : false;
 
     shell_exec('git config --global --add safe.directory /var/www/html');
@@ -220,7 +219,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     shell_exec('git fetch origin main 2>&1');
     $output = shell_exec('git reset --hard origin/main 2>&1');
     
-    // ÉTAPE DE SÉCURITÉ : Restaurer le fichier .env immédiatement
     if ($env_backup !== false) {
         file_put_contents($envFile, $env_backup);
     }
@@ -757,7 +755,6 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         h1 { font-family: 'Fredoka', sans-serif; color: #27ae60; margin: 0; font-size: 32px; line-height: 1; }
         .app-version-main { font-size: 14px; color: #7f8c8d; font-weight: bold; margin-top: 2px; }
 
-        /* Animation Clignotante pour le badge de mise à jour */
         @keyframes blinker { 50% { opacity: 0; } }
         .update-badge { display: none; color: #e74c3c; font-weight: bold; font-size: 12px; margin-top: 5px; cursor: pointer; animation: blinker 1.5s linear infinite; background: #fadbd8; padding: 2px 8px; border-radius: 12px; }
         .update-badge:hover { background: #f5b7b1; }
@@ -854,7 +851,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         <div class="header-top">
             <div class="header-title">
                 <h1>EcoTrace 🍃</h1>
-                <div class="app-version-main">v1.5.3</div>
+                <div class="app-version-main">v1.5.4</div>
                 <div id="update-badge" class="update-badge" onclick="verifierMiseAJour()">⚠️ Mise à jour disponible !</div>
             </div>
             <div class="header-actions">
@@ -924,6 +921,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                             <br><button class="btn btn-blue btn-small" onclick="lancerRechercheAjax(<?= $source['id'] ?>, true, 'gouv')">🔍 Gouv.fr</button>
                             <button class="btn btn-purple btn-small" onclick="lancerRechercheAjax(<?= $source['id'] ?>, true, 'pappers')">📄 Pappers</button>
                             <button class="btn btn-dark btn-small" onclick="lancerRechercheAjax(<?= $source['id'] ?>, true, 'societe')">🏢 Societe.com</button>
+                            <button class="btn btn-red btn-small" onclick="supprimerEnregistrement(<?= $source['id'] ?>)" title="Supprimer cet enregistrement">🗑️</button>
                             <div id="feedback-<?= $source['id'] ?>" class="ajax-feedback" style="display:block; margin-top:5px;"></div>
                         </div>
                         <?php
@@ -1183,6 +1181,11 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
     </div>
 
     <script>
+        // Nouveauté 1.5.4 : Sauvegarde du scroll avant chaque rechargement
+        window.addEventListener('beforeunload', function() {
+            sessionStorage.setItem('scrollPositionEcotrace', window.scrollY);
+        });
+
         function filtrerRapprochement() { let input = document.getElementById('filterMatchingInput').value.toLowerCase(); let cards = document.getElementById('tab-matching').getElementsByClassName('card-matching'); for (let i = 0; i < cards.length; i++) { let title = cards[i].getElementsByClassName('source-title')[0]; cards[i].style.display = (title && (title.textContent || title.innerText).toLowerCase().indexOf(input) > -1) ? "" : "none"; } }
         function filtrerValidees() { let input = document.getElementById('filterValideesInput').value.toLowerCase(); let table = document.getElementById('table-validees'); if (!table) return; let tr = table.getElementsByTagName('tr'); for (let i = 1; i < tr.length; i++) { tr[i].style.display = ((tr[i].textContent || tr[i].innerText).toLowerCase().indexOf(input) > -1) ? "" : "none"; } }
         window.onscroll = function() { document.getElementById("scrollTopBtn").style.display = (document.body.scrollTop > 200 || document.documentElement.scrollTop > 200) ? "block" : "none"; };
@@ -1200,7 +1203,18 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
             localStorage.setItem('activeTabEcotrace', tabName);
             if (tabName === 'tab-stats' && !isStatsLoaded) { setTimeout(() => { chargerStatistiques(); }, 200); isStatsLoaded = true; }
         }
-        window.addEventListener('DOMContentLoaded', (event) => { const savedTab = localStorage.getItem('activeTabEcotrace'); if (savedTab && document.getElementById(savedTab)) openTab(null, savedTab); });
+        
+        window.addEventListener('DOMContentLoaded', (event) => { 
+            const savedTab = localStorage.getItem('activeTabEcotrace'); 
+            if (savedTab && document.getElementById(savedTab)) openTab(null, savedTab); 
+            
+            // Nouveauté 1.5.4 : Restauration de la position de scroll
+            const scrollPos = sessionStorage.getItem('scrollPositionEcotrace');
+            if (scrollPos) {
+                window.scrollTo({ top: parseInt(scrollPos), behavior: 'instant' });
+                sessionStorage.removeItem('scrollPositionEcotrace');
+            }
+        });
 
         function chargerStatistiques() {
             const ctxSecteurs = document.getElementById('chartSecteurs').getContext('2d');
