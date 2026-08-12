@@ -823,9 +823,10 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         .close-modal { color: #aaa; font-size: 28px; font-weight: bold; cursor: pointer; line-height: 1; }
         .close-modal:hover { color: #333; }
         
-        #form-enrich .form-group { display: flex; align-items: center; margin-bottom: 15px; }
-        #form-enrich .form-group label { width: 200px; margin-bottom: 0; flex-shrink: 0; text-align: left; }
-        #form-enrich .form-group input { flex: 1; width: auto; }
+        /* Formulaires alignés (Enrichissement & Ajout Manuel) */
+        #form-enrich .form-group, #form-ajout-manuel .form-group { display: flex; align-items: center; margin-bottom: 15px; }
+        #form-enrich .form-group label, #form-ajout-manuel .form-group label { width: 190px; margin-bottom: 0; flex-shrink: 0; text-align: left; line-height: 1.2; padding-right: 10px; }
+        #form-enrich .form-group input, #form-ajout-manuel .form-group input, #form-ajout-manuel .form-group select { flex: 1; width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-family: 'Nunito', sans-serif; }
 
         .kpi-container { display: flex; gap: 20px; margin-bottom: 20px; }
         .kpi-box { flex: 1; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; border-bottom: 4px solid #27ae60; }
@@ -1086,7 +1087,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                 <h2 class="source-title">Insérer une entité manuellement</h2>
                 <div id="am-step-1" class="step-container">
                     <p class="text-muted">Vérifiez d'abord si l'entreprise existe dans la base officielle, ou passez directement à la saisie manuelle.</p>
-                    <div class="form-group"><label>Nom de l'entreprise *</label><input type="text" id="am_nom_recherche" placeholder="Ex: Boulangerie Dupont"></div>
+                    <div class="form-group"><label style="font-weight: bold;">Nom de l'entreprise *</label><input type="text" id="am_nom_recherche" class="input-text" style="width: 100%; box-sizing: border-box; margin-top: 5px;" placeholder="Ex: Boulangerie Dupont"></div>
                     <div style="display: flex; gap: 10px; margin-top: 15px;">
                         <button type="button" class="btn btn-blue" style="flex: 1;" onclick="verifierApiAvantAjout()">🔍 Vérifier API Gouv.fr</button>
                         <button type="button" class="btn btn-dark" style="flex: 1;" onclick="forcerSaisieManuelle()">✏️ Saisie manuelle directe</button>
@@ -1100,13 +1101,12 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                         <div class="form-group"><label>SIREN (Optionnel)</label><input type="text" name="siren" maxlength="9"></div>
                         <div class="form-group"><label>Code NAF (ex: 56.10A)</label><input type="text" name="naf"></div>
                         <div class="form-group"><label>Activité alimentaire ?</label><select name="est_alimentaire"><option value="auto">Auto</option><option value="1">Oui</option><option value="0">Non</option></select></div>
-                        <div class="form-group"><label>Statut</label><select name="statut_juridique"><option value="Actif">Actif</option><option value="En difficulté">En difficulté</option><option value="Fermée">Fermée</option></select></div>
+                        <div class="form-group"><label>Statut Juridique</label><select name="statut_juridique"><option value="Actif">Actif</option><option value="En difficulté">En difficulté</option><option value="Fermée">Fermée</option></select></div>
                         <div class="form-group"><label>Adresse complète</label><input type="text" name="adresse"></div>
-                        <div style="display: flex; gap: 10px;">
-                            <div class="form-group" style="flex: 1;"><label>Latitude</label><input type="number" name="latitude" step="0.00000001"></div>
-                            <div class="form-group" style="flex: 1;"><label>Longitude</label><input type="number" name="longitude" step="0.00000001"></div>
-                        </div>
-                        <div class="form-group"><label>Distance (km) <span style="font-weight:normal; color:#888;">(Calculée auto. si Lat/Lon fournis)</span></label><input type="number" name="distance" step="0.01"></div>
+                        <div class="form-group"><label>Latitude GPS</label><input type="number" name="latitude" step="0.00000001"></div>
+                        <div class="form-group"><label>Longitude GPS</label><input type="number" name="longitude" step="0.00000001"></div>
+                        <div class="form-group"><label>Distance (km)<br><span style="font-weight:normal; color:#888; font-size:11px;">(Auto si Lat/Lon renseignés)</span></label><input type="number" name="distance" step="0.01"></div>
+                        
                         <div id="am-feedback" class="ajax-feedback" style="margin-bottom: 15px; display: block;"></div>
                         <button type="submit" class="btn btn-warning" style="width: 100%; padding: 12px; font-size: 16px;">💾 Forcer l'enregistrement manuel</button>
                     </form>
@@ -1316,7 +1316,6 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
             } catch(e) { fb.style.color="#e74c3c"; fb.innerText="Erreur API."; }
         }
 
-        // Nouveauté 1.5.4 : Saisie Manuelle Directe
         function forcerSaisieManuelle() {
             let nom = document.getElementById('am_nom_recherche').value.trim();
             if(!nom) {
