@@ -921,6 +921,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                             <br><button class="btn btn-blue btn-small" onclick="lancerRechercheAjax(<?= $source['id'] ?>, true, 'gouv')">🔍 Gouv.fr</button>
                             <button class="btn btn-purple btn-small" onclick="lancerRechercheAjax(<?= $source['id'] ?>, true, 'pappers')">📄 Pappers</button>
                             <button class="btn btn-dark btn-small" onclick="lancerRechercheAjax(<?= $source['id'] ?>, true, 'societe')">🏢 Societe.com</button>
+                            <!-- Bouton Supprimer ajouté dans l'onglet Rapprochement -->
                             <button class="btn btn-red btn-small" onclick="supprimerEnregistrement(<?= $source['id'] ?>)" title="Supprimer cet enregistrement">🗑️</button>
                             <div id="feedback-<?= $source['id'] ?>" class="ajax-feedback" style="display:block; margin-top:5px;"></div>
                         </div>
@@ -1084,13 +1085,16 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
             <div class="card" style="max-width: 600px; margin: auto;">
                 <h2 class="source-title">Insérer une entité manuellement</h2>
                 <div id="am-step-1" class="step-container">
-                    <p class="text-muted">Vérifiez d'abord si l'entreprise existe dans la base officielle.</p>
+                    <p class="text-muted">Vérifiez d'abord si l'entreprise existe dans la base officielle, ou passez directement à la saisie manuelle.</p>
                     <div class="form-group"><label>Nom de l'entreprise *</label><input type="text" id="am_nom_recherche" placeholder="Ex: Boulangerie Dupont"></div>
-                    <button type="button" class="btn btn-blue" style="width: 100%;" onclick="verifierApiAvantAjout()">🔍 Vérifier l'existence</button>
+                    <div style="display: flex; gap: 10px; margin-top: 15px;">
+                        <button type="button" class="btn btn-blue" style="flex: 1;" onclick="verifierApiAvantAjout()">🔍 Vérifier API Gouv.fr</button>
+                        <button type="button" class="btn btn-dark" style="flex: 1;" onclick="forcerSaisieManuelle()">✏️ Saisie manuelle directe</button>
+                    </div>
                     <div id="am-step1-feedback" class="ajax-feedback" style="margin-top: 15px; font-size: 14px; text-align: center; display: block;"></div>
                 </div>
-                <div id="am-step-2" class="step-container" style="display: none; margin-top: 20px; border-top: 3px solid #f39c12;">
-                    <p class="text-muted" style="color: #e67e22; font-weight: bold; margin-bottom: 20px;">L'entreprise est introuvable. Veuillez saisir les informations.</p>
+                <div id="am-step-2" class="step-container" style="display: none; margin-top: 20px; border-top: 3px solid #f39c12; padding-top: 20px;">
+                    <p id="titre-saisie-manuelle" class="text-muted" style="color: #e67e22; font-weight: bold; margin-bottom: 20px;">Veuillez renseigner les informations de l'entreprise.</p>
                     <form id="form-ajout-manuel" onsubmit="soumettreAjoutManuel(event)">
                         <input type="hidden" id="am_nom_final" name="nom_complet">
                         <div class="form-group"><label>SIREN (Optionnel)</label><input type="text" name="siren" maxlength="9"></div>
@@ -1181,7 +1185,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
     </div>
 
     <script>
-        // Nouveauté 1.5.4 : Sauvegarde du scroll avant chaque rechargement
+        // Sauvegarde du scroll avant chaque rechargement
         window.addEventListener('beforeunload', function() {
             sessionStorage.setItem('scrollPositionEcotrace', window.scrollY);
         });
@@ -1208,7 +1212,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
             const savedTab = localStorage.getItem('activeTabEcotrace'); 
             if (savedTab && document.getElementById(savedTab)) openTab(null, savedTab); 
             
-            // Nouveauté 1.5.4 : Restauration de la position de scroll
+            // Restauration de la position de scroll
             const scrollPos = sessionStorage.getItem('scrollPositionEcotrace');
             if (scrollPos) {
                 window.scrollTo({ top: parseInt(scrollPos), behavior: 'instant' });
@@ -1297,14 +1301,36 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         }
         
         async function lancerMajAjax(act, btn) { let txt=btn.innerHTML; btn.innerHTML="⏳..."; btn.disabled=true; let f = new FormData(); f.append('action', act); try{let r = await fetch('', {method:'POST', body:f}); let d = await r.json(); alert(d.message); if(d.success)location.reload();}catch(e){alert("Erreur");} finally{btn.innerHTML=txt; btn.disabled=false;} }
+        
         async function verifierApiAvantAjout() {
             let nom = document.getElementById('am_nom_recherche').value.trim(); let fb = document.getElementById('am-step1-feedback'); let s2 = document.getElementById('am-step-2');
             if(!nom){fb.style.color="#e74c3c"; fb.innerText="Nom requis."; return;} fb.style.color="#3498db"; fb.innerText="Recherche..."; s2.style.display='none';
             try { let r = await fetch('https://recherche-entreprises.api.gouv.fr/search?q='+encodeURIComponent(nom)+'&per_page=5'); let d = await r.json();
                 if(d.results && d.results.length>0) { fb.style.color="#27ae60"; fb.innerHTML=`Trouvé ! <br><button type="button" class="btn btn-green" style="margin-top:10px;" onclick="importerDepuisAjout('${nom.replace(/'/g, "\\'")}')">L'importer automatiquement</button>`; }
-                else { fb.style.color="#e67e22"; fb.innerText="Introuvable."; document.getElementById('am_nom_final').value=nom; s2.style.display='block'; }
+                else { 
+                    fb.style.color="#e67e22"; fb.innerText="Introuvable dans l'API."; 
+                    document.getElementById('am_nom_final').value=nom; 
+                    document.getElementById('titre-saisie-manuelle').innerText = "L'entreprise est introuvable via l'API. Veuillez saisir les informations manuellement.";
+                    s2.style.display='block'; 
+                }
             } catch(e) { fb.style.color="#e74c3c"; fb.innerText="Erreur API."; }
         }
+
+        // Nouveauté 1.5.4 : Saisie Manuelle Directe
+        function forcerSaisieManuelle() {
+            let nom = document.getElementById('am_nom_recherche').value.trim();
+            if(!nom) {
+                let fb = document.getElementById('am-step1-feedback');
+                fb.style.color="#e74c3c";
+                fb.innerText="Veuillez d'abord saisir un nom d'entreprise ci-dessus.";
+                return;
+            }
+            document.getElementById('am_nom_final').value = nom;
+            document.getElementById('titre-saisie-manuelle').innerText = "Saisie manuelle directe. Veuillez renseigner les informations.";
+            document.getElementById('am-step-2').style.display = 'block';
+            document.getElementById('am-step1-feedback').innerText = "";
+        }
+
         async function importerDepuisAjout(nom) { let f=new FormData(); f.append('action','import_line'); f.append('nom_recherche',nom); await fetch('', {method:'POST', body:f}); location.reload(); }
         async function soumettreAjoutManuel(e) { e.preventDefault(); let f=new FormData(e.target); f.append('action','ajout_manuel'); await fetch('', {method:'POST', body:f}); location.reload(); }
 
