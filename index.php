@@ -1,6 +1,6 @@
 <?php
 /**
- * EcoTrace 🍃 - Version 1.6.0
+ * EcoTrace 🍃 - Version 1.6.1
  * 
  * Copyright (C) 2026 David NAU <dnau.1973@gmail.com>
  * 
@@ -45,7 +45,6 @@ $admin_user = $env['ADMIN_USER'] ?? 'admin';
 $admin_pass = $env['ADMIN_PASS'] ?? 'admin';
 $pappers_key = trim($env['PAPPERS_API_KEY'] ?? '');
 $societe_key = trim($env['SOCIETE_API_KEY'] ?? '');
-// URL GitHub intégrée par défaut SANS le token (sécurité)
 $github_repo = trim($env['GITHUB_REPO'] ?? 'https://github.com/dnau1973-hash/ecotrace.git');
 $origineLat = $env['ORIGIN_LAT'] ?? 45.19165526;
 $origineLon = $env['ORIGIN_LON'] ?? 0.76262712;
@@ -80,7 +79,7 @@ if (!file_exists($envFile) || $is_editing_config) {
     <body>
         <div class="install-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.6.0</div>
+            <div class="app-version">Version 1.6.1</div>
             <p style="text-align:center; color:#666;"><?= $is_editing_config ? "Modification des paramètres de configuration." : "Veuillez configurer les paramètres avant l'installation." ?></p>
             <form method="POST" action="?">
                 <input type="hidden" name="setup_env_action" value="1">
@@ -159,7 +158,7 @@ if (empty($_SESSION['ecotrace_logged_in'])) {
     <body>
         <div class="login-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.6.0</div>
+            <div class="app-version">Version 1.6.1</div>
             <p>Veuillez vous identifier</p>
             <?php if (isset($login_error)) echo "<div class='error'>$login_error</div>"; ?>
             <form method="POST">
@@ -178,7 +177,6 @@ if (empty($_SESSION['ecotrace_logged_in'])) {
 // 2.5 AUTO-UPDATER GITHUB
 // =========================================================================
 
-// Vérifier la mise à jour
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'check_github_update') {
     header('Content-Type: application/json');
     if (empty($github_repo)) { echo json_encode(['success' => false, 'message' => 'Le lien du dépôt GitHub n\'est pas configuré dans les paramètres.']); exit; }
@@ -202,13 +200,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     exit;
 }
 
-// Exécuter la mise à jour avec protection du .env
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'do_github_update') {
     header('Content-Type: application/json');
     if (empty($github_repo)) { echo json_encode(['success' => false, 'message' => 'Le lien GitHub n\'est pas configuré.']); exit; }
     
     $env_backup = file_exists($envFile) ? file_get_contents($envFile) : false;
-
     shell_exec('git config --global --add safe.directory /var/www/html');
     
     if (!is_dir('.git')) {
@@ -254,6 +250,8 @@ try {
             try { $pdo->exec("ALTER TABLE sources_csv ADD COLUMN poids DECIMAL(10,2) DEFAULT 0 AFTER montant"); } catch (PDOException $e) {}
             try { $pdo->exec("ALTER TABLE api_resultats ADD COLUMN est_ess TINYINT(1) DEFAULT 0 AFTER est_alimentaire"); } catch (PDOException $e) {}
             try { $pdo->exec("ALTER TABLE api_resultats ADD COLUMN est_societe_mission TINYINT(1) DEFAULT 0 AFTER est_ess"); } catch (PDOException $e) {}
+            // Ajout de la colonne pour le surlignage persistant en v1.6.1
+            try { $pdo->exec("ALTER TABLE api_resultats ADD COLUMN est_connu TINYINT(1) DEFAULT 0 AFTER est_societe_mission"); } catch (PDOException $e) {}
         }
     }
 } catch (PDOException $e) {
@@ -290,6 +288,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_action'])) {
             est_alimentaire TINYINT(1) DEFAULT 0,
             est_ess TINYINT(1) DEFAULT 0,
             est_societe_mission TINYINT(1) DEFAULT 0,
+            est_connu TINYINT(1) DEFAULT 0,
             statut_juridique VARCHAR(100) DEFAULT 'Actif',
             siege_adresse TEXT NULL,
             latitude DECIMAL(10,8) NULL,
@@ -341,16 +340,16 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     header('Content-Disposition: attachment; filename=ecotrace_export_' . date('Ymd_His') . '.csv');
     $output = fopen('php://output', 'w');
     fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF)); 
-    fputcsv($output, ['ID Source', 'Recherche Initiale', 'Statut', 'Date Import', 'Montant (€)', 'Poids (kg)', 'Emissions Est. (kgCO2)', 'SIREN', 'Nom Validé', 'Code NAF', 'Libellé NAF', 'Alimentaire', 'ESS', 'A Mission', 'Santé Juridique', 'Adresse', 'Latitude', 'Longitude', 'Distance (km)'], ';');
+    fputcsv($output, ['ID Source', 'Recherche Initiale', 'Statut', 'Date Import', 'Montant (€)', 'Poids (kg)', 'Emissions Est. (kgCO2)', 'SIREN', 'Nom Validé', 'Code NAF', 'Libellé NAF', 'Alimentaire', 'ESS', 'A Mission', 'Connu', 'Santé Juridique', 'Adresse', 'Latitude', 'Longitude', 'Distance (km)'], ';');
     
-    $stmtExport = $pdo->query("SELECT s.id, s.nom_recherche, s.statut, s.date_import, s.montant, s.poids, r.siren, r.nom_complet, r.activite_principale, r.activite_principale_libelle, r.est_alimentaire, r.est_ess, r.est_societe_mission, r.statut_juridique, r.siege_adresse, r.latitude, r.longitude, r.distance FROM sources_csv s INNER JOIN api_resultats r ON s.api_result_id_selectionne = r.id WHERE s.statut IN ('valide_auto', 'valide_manuel') ORDER BY s.id DESC");
+    $stmtExport = $pdo->query("SELECT s.id, s.nom_recherche, s.statut, s.date_import, s.montant, s.poids, r.siren, r.nom_complet, r.activite_principale, r.activite_principale_libelle, r.est_alimentaire, r.est_ess, r.est_societe_mission, r.est_connu, r.statut_juridique, r.siege_adresse, r.latitude, r.longitude, r.distance FROM sources_csv s INNER JOIN api_resultats r ON s.api_result_id_selectionne = r.id WHERE s.statut IN ('valide_auto', 'valide_manuel') ORDER BY s.id DESC");
     
     while ($row = $stmtExport->fetch(PDO::FETCH_ASSOC)) {
         $co2 = estimerCO2($row['activite_principale'], $row['montant'], $row['poids'], $row['distance']);
         fputcsv($output, [
             $row['id'], $row['nom_recherche'], $row['statut'], $row['date_import'], $row['montant'], $row['poids'], $co2,
             $row['siren'], $row['nom_complet'], $row['activite_principale'], $row['activite_principale_libelle'],
-            $row['est_alimentaire']?'OUI':'NON', $row['est_ess']?'OUI':'NON', $row['est_societe_mission']?'OUI':'NON',
+            $row['est_alimentaire']?'OUI':'NON', $row['est_ess']?'OUI':'NON', $row['est_societe_mission']?'OUI':'NON', $row['est_connu']?'OUI':'NON',
             $row['statut_juridique'], $row['siege_adresse'], $row['latitude'], $row['longitude'], $row['distance']
         ], ';');
     }
@@ -424,52 +423,9 @@ function getLibelleNafLocal($codeNaf) {
     if (empty($codeNaf)) return "Non renseigné";
     $cleanCode = strtoupper(trim(str_replace('.', '', $codeNaf)));
     if (strlen($cleanCode) === 5) $cleanCode = substr($cleanCode, 0, 2) . '.' . substr($cleanCode, 2);
-    
-    // Liste des exceptions précises (surtout alimentaire)
-    $nafTable = [
-        '56.10A' => 'Restauration traditionnelle', '56.10B' => 'Cafétérias', '56.10C' => 'Restauration rapide', 
-        '56.21Z' => 'Services des traiteurs', '56.30Z' => 'Débits de boissons', '55.10Z' => 'Hôtels', 
-        '10.71C' => 'Boulangerie', '10.71D' => 'Pâtisserie', '10.11Z' => 'Viande de boucherie', 
-        '47.11A' => 'Surgelés', '47.11B' => 'Alimentation générale', '47.11C' => 'Supérettes', 
-        '47.11D' => 'Supermarchés', '47.11F' => 'Hypermarchés', '47.21Z' => 'Fruits et légumes', 
-        '46.39B' => 'Gros alimentaire'
-    ];
+    $nafTable = ['56.10A' => 'Restauration traditionnelle', '56.10B' => 'Cafétérias', '56.10C' => 'Restauration rapide', '56.21Z' => 'Services des traiteurs', '56.30Z' => 'Débits de boissons', '55.10Z' => 'Hôtels', '10.71C' => 'Boulangerie', '10.71D' => 'Pâtisserie', '10.11Z' => 'Viande de boucherie', '47.11A' => 'Surgelés', '47.11B' => 'Alimentation générale', '47.11C' => 'Supérettes', '47.11D' => 'Supermarchés', '47.11F' => 'Hypermarchés', '47.21Z' => 'Fruits et légumes', '46.39B' => 'Gros alimentaire'];
     if (isset($nafTable[$cleanCode])) return $nafTable[$cleanCode];
-    
-    // Dictionnaire complet des divisions (2 premiers chiffres) NAF / NACE Rev. 2
-    $divs = [
-        '01' => 'Agriculture et services annexes', '02' => 'Sylviculture', '03' => 'Pêche et aquaculture',
-        '05' => 'Extraction de houille', '06' => 'Extraction d\'hydrocarbures', '07' => 'Extraction de minerais métalliques', '08' => 'Autres industries extractives', '09' => 'Services de soutien extractifs',
-        '10' => 'Industrie alimentaire', '11' => 'Fabrication de boissons', '12' => 'Fabrication de produits à base de tabac', '13' => 'Fabrication de textiles',
-        '14' => 'Industrie de l\'habillement', '15' => 'Industrie du cuir et de la chaussure', '16' => 'Travail du bois',
-        '17' => 'Industrie du papier', '18' => 'Imprimerie', '19' => 'Cokéfaction et raffinage',
-        '20' => 'Industrie chimique', '21' => 'Industrie pharmaceutique', '22' => 'Fabrication de produits en caoutchouc',
-        '23' => 'Fabrication d\'autres produits minéraux non métalliques', '24' => 'Métallurgie', '25' => 'Fabrication de produits métalliques',
-        '26' => 'Fabrication de produits informatiques et électroniques', '27' => 'Fabrication d\'équipements électriques',
-        '28' => 'Fabrication de machines et équipements', '29' => 'Industrie automobile', '30' => 'Fabrication d\'autres matériels de transport',
-        '31' => 'Fabrication de meubles', '32' => 'Autres industries manufacturières', '33' => 'Réparation et installation de machines',
-        '35' => 'Production et distribution d\'électricité, gaz, vapeur', '36' => 'Captage, traitement et distribution d\'eau',
-        '37' => 'Collecte et traitement des eaux usées', '38' => 'Collecte et traitement des déchets', '39' => 'Dépollution',
-        '41' => 'Construction de bâtiments', '42' => 'Génie civil', '43' => 'Travaux de construction spécialisés',
-        '45' => 'Commerce et réparation d\'automobiles', '46' => 'Commerce de gros', '47' => 'Commerce de détail',
-        '49' => 'Transports terrestres', '50' => 'Transports par eau', '51' => 'Transports aériens',
-        '52' => 'Entreposage et services logistiques', '53' => 'Activités de poste et de courrier',
-        '55' => 'Hébergement', '56' => 'Restauration', '58' => 'Édition',
-        '59' => 'Production de films, vidéo et musique', '60' => 'Programmation et diffusion',
-        '61' => 'Télécommunications', '62' => 'Programmation et conseil en informatique', '63' => 'Services d\'information',
-        '64' => 'Activités financières', '65' => 'Assurance', '66' => 'Activités auxiliaires de services financiers',
-        '68' => 'Activités immobilières', '69' => 'Activités juridiques et comptables', '70' => 'Sièges sociaux et conseil de gestion',
-        '71' => 'Architecture et ingénierie', '72' => 'Recherche-développement scientifique', '73' => 'Publicité et études de marché',
-        '74' => 'Autres activités spécialisées, scientifiques et techniques', '75' => 'Activités vétérinaires',
-        '77' => 'Location et location-bail', '78' => 'Activités liées à l\'emploi', '79' => 'Agences de voyage',
-        '80' => 'Enquêtes et sécurité', '81' => 'Services relatifs aux bâtiments et paysagisme', '82' => 'Activités administratives de bureau',
-        '84' => 'Administration publique', '85' => 'Enseignement', '86' => 'Santé humaine',
-        '87' => 'Hébergement médico-social et social', '88' => 'Action sociale sans hébergement',
-        '90' => 'Activités créatives, artistiques et de spectacle', '91' => 'Bibliothèques, archives et musées',
-        '92' => 'Organisation de jeux de hasard', '93' => 'Activités sportives et récréatives',
-        '94' => 'Organisations associatives', '95' => 'Réparation d\'ordinateurs et biens', '96' => 'Autres services personnels',
-        '97' => 'Activités des ménages', '99' => 'Activités extraterritoriales'
-    ];
+    $divs = ['01' => 'Agriculture et services annexes', '02' => 'Sylviculture', '03' => 'Pêche et aquaculture', '05' => 'Extraction de houille', '06' => 'Extraction d\'hydrocarbures', '07' => 'Extraction de minerais métalliques', '08' => 'Autres industries extractives', '09' => 'Services de soutien extractifs', '10' => 'Industrie alimentaire', '11' => 'Fabrication de boissons', '12' => 'Fabrication de produits à base de tabac', '13' => 'Fabrication de textiles', '14' => 'Industrie de l\'habillement', '15' => 'Industrie du cuir et de la chaussure', '16' => 'Travail du bois', '17' => 'Industrie du papier', '18' => 'Imprimerie', '19' => 'Cokéfaction et raffinage', '20' => 'Industrie chimique', '21' => 'Industrie pharmaceutique', '22' => 'Fabrication de produits en caoutchouc', '23' => 'Fabrication d\'autres produits minéraux non métalliques', '24' => 'Métallurgie', '25' => 'Fabrication de produits métalliques', '26' => 'Fabrication de produits informatiques et électroniques', '27' => 'Fabrication d\'équipements électriques', '28' => 'Fabrication de machines et équipements', '29' => 'Industrie automobile', '30' => 'Fabrication d\'autres matériels de transport', '31' => 'Fabrication de meubles', '32' => 'Autres industries manufacturières', '33' => 'Réparation et installation de machines', '35' => 'Production et distribution d\'électricité, gaz, vapeur', '36' => 'Captage, traitement et distribution d\'eau', '37' => 'Collecte et traitement des eaux usées', '38' => 'Collecte et traitement des déchets', '39' => 'Dépollution', '41' => 'Construction de bâtiments', '42' => 'Génie civil', '43' => 'Travaux de construction spécialisés', '45' => 'Commerce et réparation d\'automobiles', '46' => 'Commerce de gros', '47' => 'Commerce de détail', '49' => 'Transports terrestres', '50' => 'Transports par eau', '51' => 'Transports aériens', '52' => 'Entreposage et services logistiques', '53' => 'Activités de poste et de courrier', '55' => 'Hébergement', '56' => 'Restauration', '58' => 'Édition', '59' => 'Production de films, vidéo et musique', '60' => 'Programmation et diffusion', '61' => 'Télécommunications', '62' => 'Programmation et conseil en informatique', '63' => 'Services d\'information', '64' => 'Activités financières', '65' => 'Assurance', '66' => 'Activités auxiliaires de services financiers', '68' => 'Activités immobilières', '69' => 'Activités juridiques et comptables', '70' => 'Sièges sociaux et conseil de gestion', '71' => 'Architecture et ingénierie', '72' => 'Recherche-développement scientifique', '73' => 'Publicité et études de marché', '74' => 'Autres activités spécialisées, scientifiques et techniques', '75' => 'Activités vétérinaires', '77' => 'Location et location-bail', '78' => 'Activités liées à l\'emploi', '79' => 'Agences de voyage', '80' => 'Enquêtes et sécurité', '81' => 'Services relatifs aux bâtiments et paysagisme', '82' => 'Activités administratives de bureau', '84' => 'Administration publique', '85' => 'Enseignement', '86' => 'Santé humaine', '87' => 'Hébergement médico-social et social', '88' => 'Action sociale sans hébergement', '90' => 'Activités créatives, artistiques et de spectacle', '91' => 'Bibliothèques, archives et musées', '92' => 'Organisation de jeux de hasard', '93' => 'Activités sportives et récréatives', '94' => 'Organisations associatives', '95' => 'Réparation d\'ordinateurs et biens', '96' => 'Autres services personnels', '97' => 'Activités des ménages', '99' => 'Activités extraterritoriales'];
     return $divs[substr($cleanCode, 0, 2)] ?? "Secteur d'activité ($cleanCode)";
 }
 
@@ -507,6 +463,30 @@ function determinerSanteJuridique($entreprise) {
 // =========================================================================
 // 5. REQUÊTES AJAX
 // =========================================================================
+
+// Mettre en évidence les SIREN en base de données
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'highlight_sirens') {
+    header('Content-Type: application/json');
+    $sirens = json_decode($_POST['sirens'] ?? '[]', true);
+    if (!is_array($sirens) || empty($sirens)) {
+        echo json_encode(['success' => false, 'message' => 'Aucun SIREN valide fourni.']); exit;
+    }
+    try {
+        $pdo->beginTransaction();
+        $stmt = $pdo->prepare("UPDATE api_resultats SET est_connu = 1 WHERE siren = :siren");
+        $count = 0;
+        foreach ($sirens as $s) {
+            $stmt->execute([':siren' => $s]);
+            $count += $stmt->rowCount();
+        }
+        $pdo->commit();
+        echo json_encode(['success' => true, 'count' => $count]);
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'get_bodacc_details') {
     header('Content-Type: application/json');
@@ -757,7 +737,7 @@ $sourcesIntrouvables = $pdo->query("SELECT * FROM sources_csv WHERE statut = 'in
 $sourcesValides = $pdo->query("
     SELECT s.id as source_id, s.nom_recherche, s.statut, s.date_import, s.montant, s.poids,
            r.id as resultat_id, r.siren, r.nom_complet, r.siege_adresse, r.latitude, r.longitude, r.distance, 
-           r.activite_principale, r.activite_principale_libelle, r.est_alimentaire, r.est_ess, r.est_societe_mission, r.statut_juridique
+           r.activite_principale, r.activite_principale_libelle, r.est_alimentaire, r.est_ess, r.est_societe_mission, r.est_connu, r.statut_juridique
     FROM sources_csv s INNER JOIN api_resultats r ON s.api_result_id_selectionne = r.id
     WHERE s.statut IN ('valide_auto', 'valide_manuel') ORDER BY s.id DESC LIMIT 1000
 ")->fetchAll(PDO::FETCH_ASSOC);
@@ -866,7 +846,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         .close-modal { color: #aaa; font-size: 28px; font-weight: bold; cursor: pointer; line-height: 1; }
         .close-modal:hover { color: #333; }
         
-        /* Highlight SIREN matching (v1.6.0) */
+        /* Highlight SIREN matching persisté */
         tr.highlight-siren > td { background-color: #d1f2eb !important; border-top: 2px solid #1abc9c; border-bottom: 2px solid #1abc9c; }
         
         /* Formulaires alignés (Enrichissement & Ajout Manuel) */
@@ -898,7 +878,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         <div class="header-top">
             <div class="header-title">
                 <h1>EcoTrace 🍃</h1>
-                <div class="app-version-main">v1.6.0</div>
+                <div class="app-version-main">v1.6.1</div>
                 <div id="update-badge" class="update-badge" onclick="verifierMiseAJour()">⚠️ Mise à jour disponible !</div>
             </div>
             <div class="header-actions">
@@ -920,8 +900,8 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                         <button onclick="document.getElementById('csv-upload').click()" style="border-top: 1px solid #ddd;" title="Format : Nom, Montant(€), Poids(kg)">📁 Importer CSV enrichi</button>
                         <a href="?export=csv">📥 Exporter CSV final</a>
                         
-                        <!-- Nouveauté 1.6.0 : Surlignage via SIREN CSV -->
-                        <button onclick="document.getElementById('siren-highlight-upload').click()" style="border-top: 1px solid #ddd; color: #1abc9c; font-weight: bold;" title="Mettre en évidence les fournisseurs connus">✨ Surligner via SIREN (CSV)</button>
+                        <!-- Nouveauté 1.6.1 : Surlignage via SIREN (Base de données) -->
+                        <button onclick="document.getElementById('siren-highlight-upload').click()" style="border-top: 1px solid #ddd; color: #1abc9c; font-weight: bold;" title="Mettre en évidence et sauvegarder les fournisseurs connus">✨ Surligner via SIREN (CSV)</button>
 
                         <!-- Maintenance et Mises à jour -->
                         <button onclick="verifierMiseAJour()" style="border-top: 1px solid #ddd; color: #27ae60; font-weight: bold;">🔄 Vérifier mise à jour</button>
@@ -991,7 +971,8 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                             </thead>
                             <tbody>
                                 <?php foreach ($candidats as $candidat): ?>
-                                    <tr data-siren="<?= htmlspecialchars($candidat['siren'] ?? '') ?>">
+                                    <?php $highlightClass = !empty($candidat['est_connu']) ? 'highlight-siren' : ''; ?>
+                                    <tr data-siren="<?= htmlspecialchars($candidat['siren'] ?? '') ?>" class="<?= $highlightClass ?>">
                                         <td>
                                             <?php $sJ = $candidat['statut_juridique'] ?? 'Actif'; $sClass = ($sJ === 'Fermée' || strpos($sJ, 'Liquidation') !== false) ? 'sante-ferme' : (($sJ !== 'Actif') ? 'sante-difficulte' : 'sante-actif'); ?>
                                             <strong><?= htmlspecialchars($candidat['nom_complet'] ?? '') ?></strong>
@@ -1071,7 +1052,8 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                         </thead>
                         <tbody>
                             <?php foreach ($sourcesValides as $valide): ?>
-                                <tr>
+                                <?php $highlightClass = !empty($valide['est_connu']) ? 'highlight-siren' : ''; ?>
+                                <tr class="<?= $highlightClass ?>">
                                     <td>
                                         <div style="margin-bottom: 6px;"><span class="text-muted-inline" style="color: #e67e22;">🔍 Recherche CSV : <strong><?= htmlspecialchars($valide['nom_recherche'] ?? '') ?></strong></span></div>
                                         <?php $sJ = $valide['statut_juridique'] ?? 'Actif'; $sClass = ($sJ === 'Fermée' || strpos($sJ, 'Liquidation') !== false) ? 'sante-ferme' : (($sJ !== 'Actif') ? 'sante-difficulte' : 'sante-actif'); ?>
@@ -1287,12 +1269,12 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
             if(bounds.length > 1) mapGlobal.fitBounds(bounds, {padding: [30, 30]});
         }
 
-        // Nouveauté 1.6.0 : Surlignage via SIREN
+        // Nouveauté 1.6.1 : Surlignage via SIREN avec sauvegarde en base de données
         async function highlightSirenFromCSV(event) {
             const file = event.target.files[0];
             if (!file) return;
             const reader = new FileReader();
-            reader.onload = function(e) {
+            reader.onload = async function(e) {
                 const text = e.target.result;
                 const lines = text.split('\n');
                 let sirens = [];
@@ -1309,16 +1291,22 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                     return;
                 }
                 
-                let count = 0;
-                const rows = document.querySelectorAll('#tab-matching .result-table tbody tr');
-                rows.forEach(row => {
-                    const s = row.getAttribute('data-siren');
-                    if (s && sirens.includes(s)) {
-                        row.classList.add('highlight-siren');
-                        count++;
+                let f = new FormData();
+                f.append('action', 'highlight_sirens');
+                f.append('sirens', JSON.stringify(sirens));
+                
+                try {
+                    let r = await fetch('', {method: 'POST', body: f});
+                    let d = await r.json();
+                    if(d.success) {
+                        alert("✅ Correspondances enregistrées en base : " + d.count + " candidat(s) mis à jour.");
+                        location.reload();
+                    } else {
+                        alert("Erreur base de données : " + d.message);
                     }
-                });
-                alert(count + " candidat(s) mis en évidence avec succès !");
+                } catch(err) {
+                    alert("Erreur de communication avec le serveur.");
+                }
             };
             reader.readAsText(file);
             event.target.value = '';
