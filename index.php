@@ -1,6 +1,6 @@
 <?php
 /**
- * EcoTrace 🍃 - Version 1.6.51
+ * EcoTrace 🍃 - Version 1.6.6
  * 
  * Copyright (C) 2026 David NAU <dnau.1973@gmail.com>
  * 
@@ -45,6 +45,7 @@ $admin_user = $env['ADMIN_USER'] ?? 'admin';
 $admin_pass = $env['ADMIN_PASS'] ?? 'admin';
 $pappers_key = trim($env['PAPPERS_API_KEY'] ?? '');
 $societe_key = trim($env['SOCIETE_API_KEY'] ?? '');
+// URL GitHub intégrée par défaut SANS le token (sécurité)
 $github_repo = trim($env['GITHUB_REPO'] ?? 'https://github.com/dnau1973-hash/ecotrace.git');
 $origineLat = $env['ORIGIN_LAT'] ?? 45.19165526;
 $origineLon = $env['ORIGIN_LON'] ?? 0.76262712;
@@ -79,7 +80,7 @@ if (!file_exists($envFile) || $is_editing_config) {
     <body>
         <div class="install-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.6.51</div>
+            <div class="app-version">Version 1.6.6</div>
             <p style="text-align:center; color:#666;"><?= $is_editing_config ? "Modification des paramètres de configuration." : "Veuillez configurer les paramètres avant l'installation." ?></p>
             <form method="POST" action="?">
                 <input type="hidden" name="setup_env_action" value="1">
@@ -158,7 +159,7 @@ if (empty($_SESSION['ecotrace_logged_in'])) {
     <body>
         <div class="login-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.6.51</div>
+            <div class="app-version">Version 1.6.6</div>
             <p>Veuillez vous identifier</p>
             <?php if (isset($login_error)) echo "<div class='error'>$login_error</div>"; ?>
             <form method="POST">
@@ -307,7 +308,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_action'])) {
         ";
         $pdoServer->exec($sql);
 
-        // Nouveauté 1.6.51 : Import automatique NAF à l'installation
+        // Import automatique NAF à l'installation
         $nafFile = __DIR__ . '/insee.codenaf.csv';
         if (file_exists($nafFile)) {
             $handle = fopen($nafFile, "r");
@@ -316,7 +317,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_action'])) {
                 $firstLine = fgets($handle);
                 $delim = (strpos($firstLine, ';') !== false) ? ';' : ',';
                 rewind($handle);
-                fgetcsv($handle, 1000, $delim); // Skip header
+                fgetcsv($handle, 1000, $delim); 
                 while (($data = fgetcsv($handle, 1000, $delim)) !== FALSE) {
                     if (isset($data[0]) && isset($data[1])) {
                         $code = mb_substr(trim($data[0]), 0, 10, 'UTF-8');
@@ -496,6 +497,49 @@ function determinerSanteJuridique($entreprise) {
 // 5. REQUÊTES AJAX
 // =========================================================================
 
+// Nouveauté 1.6.6 : Action pour mettre à jour les distances manquantes (Villes)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_distances_manquantes') {
+    header('Content-Type: application/json');
+    try {
+        // Limité à 25 pour ne pas surcharger Nominatim et risquer un blocage IP
+        $stmt = $pdo->query("SELECT id, siege_adresse FROM api_resultats WHERE (latitude IS NULL OR longitude IS NULL OR distance IS NULL) AND siege_adresse IS NOT NULL AND siege_adresse != '' LIMIT 25");
+        $entreprises = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $count = 0;
+        
+        $stmtUpdate = $pdo->prepare("UPDATE api_resultats SET latitude = :lat, longitude = :lon, distance = :dist WHERE id = :id");
+        
+        foreach ($entreprises as $ent) {
+            $adresse = trim($ent['siege_adresse'] ?? '');
+            if (empty($adresse)) continue;
+            
+            $fallback_geo = '';
+            if (preg_match('/([0-9]{5})\s+(.*)$/', $adresse, $matches)) {
+                $fallback_geo = trim($matches[1] . ' ' . $matches[2]);
+            } else {
+                $fallback_geo = $adresse;
+            }
+            
+            usleep(1000000); // Pause obligatoire de 1 sec pour respecter les CGU OpenStreetMap
+            $coords = geocoderAdresseOSM($fallback_geo);
+            
+            if ($coords) {
+                $lat = $coords['lat'];
+                $lon = $coords['lon'];
+                $dist = calculerDistance($origineLat, $origineLon, $lat, $lon);
+                $stmtUpdate->execute([':lat' => $lat, ':lon' => $lon, ':dist' => $dist, ':id' => $ent['id']]);
+                $count++;
+            }
+        }
+        
+        $reste = $pdo->query("SELECT COUNT(id) FROM api_resultats WHERE (latitude IS NULL OR longitude IS NULL OR distance IS NULL) AND siege_adresse IS NOT NULL AND siege_adresse != ''")->fetchColumn();
+        
+        echo json_encode(['success' => true, 'message' => "✅ $count entité(s) localisée(s) via leur ville.\nIl reste environ $reste entité(s) sans coordonnées."]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => "Erreur : " . $e->getMessage()]);
+    }
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_naf') {
     header('Content-Type: application/json');
     try {
@@ -645,7 +689,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $nom = trim($_POST['nom_complet'] ?? ''); $siren = trim($_POST['siren'] ?? ''); $naf = trim($_POST['naf'] ?? ''); $adresse = trim($_POST['adresse'] ?? ''); $statut_juridique = trim($_POST['statut_juridique'] ?? 'Actif');
     $latitude = !empty($_POST['latitude']) ? (float)$_POST['latitude'] : null; $longitude = !empty($_POST['longitude']) ? (float)$_POST['longitude'] : null; $distance = !empty($_POST['distance']) ? (float)$_POST['distance'] : null;
     
-    if (empty($latitude) || empty($longitude)) { $coords = geocoderAdresseOSM($adresse); if ($coords) { $latitude = $coords['lat']; $longitude = $coords['lon']; } }
+    // Nouveauté 1.6.6 : Fallback Ajout manuel
+    $fallback_geo = preg_match('/([0-9]{5})\s+(.*)$/', $adresse, $matches) ? trim($matches[1] . ' ' . $matches[2]) : null;
+
+    if (empty($latitude) || empty($longitude)) { 
+        $coords = geocoderAdresseOSM($adresse); 
+        if (!$coords && $fallback_geo) { $coords = geocoderAdresseOSM($fallback_geo); }
+        if ($coords) { $latitude = $coords['lat']; $longitude = $coords['lon']; } 
+    }
     if ($latitude && $longitude && empty($distance)) $distance = calculerDistance($origineLat, $origineLon, $latitude, $longitude);
     if (empty($nom)) { echo json_encode(['success' => false, 'message' => 'Le nom est obligatoire.']); exit; }
 
@@ -699,9 +750,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $stmtInsertResult = $pdo->prepare("INSERT INTO api_resultats (source_id, siren, nom_complet, activite_principale, activite_principale_libelle, est_alimentaire, est_ess, est_societe_mission, statut_juridique, siege_adresse, latitude, longitude, distance) VALUES (:source_id, :siren, :nom_complet, :activite_principale, :activite_principale_libelle, :est_alimentaire, :est_ess, :est_mission, :statut_juridique, :siege_adresse, :latitude, :longitude, :distance)");
             foreach ($resultats as $entreprise) {
                 $act = (string)($entreprise['activite_principale'] ?? '');
-                $lat = $entreprise['siege']['latitude'] ?? null; $lon = $entreprise['siege']['longitude'] ?? null;
                 $adresse = trim(($entreprise['siege']['adresse'] ?? ''));
-                if (empty($lat) || empty($lon)) { $coords = geocoderAdresseOSM($adresse); if ($coords) { $lat = $coords['lat']; $lon = $coords['lon']; } }
+                
+                // Nouveauté 1.6.6 : Fallback ville pour Gouv.fr
+                $cp = trim($entreprise['siege']['code_postal'] ?? '');
+                $ville = trim($entreprise['siege']['libelle_commune'] ?? '');
+                $fallback_geo = ($cp && $ville) ? "$cp $ville" : null;
+                
+                $lat = $entreprise['siege']['latitude'] ?? null; $lon = $entreprise['siege']['longitude'] ?? null;
+                if (empty($lat) || empty($lon)) { 
+                    $coords = geocoderAdresseOSM($adresse); 
+                    if (!$coords && $fallback_geo) { $coords = geocoderAdresseOSM($fallback_geo); }
+                    if ($coords) { $lat = $coords['lat']; $lon = $coords['lon']; } 
+                }
 
                 $dist = ($lat && $lon) ? calculerDistance($origineLat, $origineLon, $lat, $lon) : null;
                 $sante = determinerSanteJuridique($entreprise);
@@ -742,11 +803,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         if ($reponse) {
             $donneesJSON = json_decode($reponse, true); $raw_results = $donneesJSON['resultats'] ?? [];
             foreach(array_slice($raw_results, 0, 5) as $ent) {
+                // Nouveauté 1.6.6 : Fallback ville Pappers
+                $cp = trim($ent['siege']['code_postal'] ?? '');
+                $ville = trim($ent['siege']['ville'] ?? '');
+                $fallback_geo = ($cp && $ville) ? "$cp $ville" : null;
+                
                 $entreprises_trouvees[] = [
                     'siren' => $ent['siren'] ?? null, 'nom_complet' => $ent['nom_entreprise'] ?? $ent['denomination'] ?? 'Nom inconnu', 'activite_principale' => $ent['code_naf'] ?? null,
-                    'adresse' => trim(($ent['siege']['adresse_ligne_1'] ?? '') . ' ' . ($ent['siege']['code_postal'] ?? '') . ' ' . ($ent['siege']['ville'] ?? '')),
+                    'adresse' => trim(($ent['siege']['adresse_ligne_1'] ?? '') . ' ' . $cp . ' ' . $ville),
                     'latitude' => $ent['siege']['latitude'] ?? null, 'longitude' => $ent['siege']['longitude'] ?? null, 'etat_administratif' => ($ent['entreprise_cessee'] ?? false) ? 'C' : 'A',
-                    'est_ess' => ($ent['entreprise_ess'] ?? false) ? 1 : 0, 'est_mission' => ($ent['societe_a_mission'] ?? false) ? 1 : 0
+                    'est_ess' => ($ent['entreprise_ess'] ?? false) ? 1 : 0, 'est_mission' => ($ent['societe_a_mission'] ?? false) ? 1 : 0,
+                    'fallback_geo' => $fallback_geo
                 ];
             }
         }
@@ -761,11 +828,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $donneesJSON = json_decode($reponse, true); $raw_results = $donneesJSON['result'] ?? [];
             foreach(array_slice($raw_results, 0, 5) as $ent) {
                 $org = $ent['organization'] ?? [];
+                $adresse = $org['full_address'] ?? null;
+                $fallback_geo = ($adresse && preg_match('/([0-9]{5})\s+(.*)$/', $adresse, $matches)) ? trim($matches[1] . ' ' . $matches[2]) : null;
+                
                 $entreprises_trouvees[] = [
                     'siren' => $org['siren'] ?? null, 'nom_complet' => $org['name'] ?? 'Nom inconnu', 'activite_principale' => $org['naf'] ?? null,
-                    'adresse' => $org['full_address'] ?? null, 'latitude' => null, 'longitude' => null, 
+                    'adresse' => $adresse, 'latitude' => null, 'longitude' => null, 
                     'etat_administratif' => ($org['status'] ?? 'A') === 'radiation' ? 'C' : 'A',
-                    'est_ess' => 0, 'est_mission' => 0
+                    'est_ess' => 0, 'est_mission' => 0, 'fallback_geo' => $fallback_geo
                 ];
             }
         }
@@ -777,10 +847,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         if ($reponse) {
             $donneesJSON = json_decode($reponse, true); $raw_results = $donneesJSON['results'] ?? [];
             foreach(array_slice($raw_results, 0, 5) as $ent) {
+                $cp = trim($ent['siege']['code_postal'] ?? '');
+                $ville = trim($ent['siege']['libelle_commune'] ?? '');
+                $fallback_geo = ($cp && $ville) ? "$cp $ville" : null;
+                
                 $entreprises_trouvees[] = [
                     'siren' => $ent['siren'] ?? null, 'nom_complet' => $ent['nom_complet'] ?? null, 'activite_principale' => $ent['activite_principale'] ?? null,
                     'adresse' => $ent['siege']['adresse'] ?? null, 'latitude' => $ent['siege']['latitude'] ?? null, 'longitude' => $ent['siege']['longitude'] ?? null, 'etat_administratif' => $ent['etat_administratif'] ?? 'A',
-                    'est_ess' => ($ent['complements']['est_ess'] ?? false) ? 1 : 0, 'est_mission' => ($ent['complements']['est_societe_mission'] ?? false) ? 1 : 0
+                    'est_ess' => ($ent['complements']['est_ess'] ?? false) ? 1 : 0, 'est_mission' => ($ent['complements']['est_societe_mission'] ?? false) ? 1 : 0,
+                    'fallback_geo' => $fallback_geo
                 ];
             }
         }
@@ -797,8 +872,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $dernierResultatId = null;
     
     foreach ($entreprises_trouvees as $entreprise) {
-        $act = (string)($entreprise['activite_principale'] ?? ''); $lat = $entreprise['latitude'] ?? null; $lon = $entreprise['longitude'] ?? null; $adresse = $entreprise['adresse'] ?? null;
-        if (empty($lat) || empty($lon)) { $coords = geocoderAdresseOSM($adresse); if ($coords) { $lat = $coords['lat']; $lon = $coords['lon']; } }
+        $act = (string)($entreprise['activite_principale'] ?? ''); 
+        $lat = $entreprise['latitude'] ?? null; 
+        $lon = $entreprise['longitude'] ?? null; 
+        $adresse = $entreprise['adresse'] ?? null;
+        $fallback_geo = $entreprise['fallback_geo'] ?? null;
+        
+        if (empty($lat) || empty($lon)) { 
+            $coords = geocoderAdresseOSM($adresse); 
+            if (!$coords && $fallback_geo) { $coords = geocoderAdresseOSM($fallback_geo); }
+            if ($coords) { $lat = $coords['lat']; $lon = $coords['lon']; } 
+        }
         $dist = ($lat && $lon) ? calculerDistance($origineLat, $origineLon, $lat, $lon) : null;
         $sante = determinerSanteJuridique(['siren' => $entreprise['siren'], 'etat_administratif' => $entreprise['etat_administratif']]);
 
@@ -974,7 +1058,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         <div class="header-top">
             <div class="header-title">
                 <h1>EcoTrace 🍃</h1>
-                <div class="app-version-main">v1.6.51</div>
+                <div class="app-version-main">v1.6.6</div>
                 <div id="update-badge" class="update-badge" onclick="verifierMiseAJour()">⚠️ Mise à jour disponible !</div>
             </div>
             <div class="header-actions">
@@ -1005,7 +1089,9 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                         <!-- Maintenance et Mises à jour -->
                         <button onclick="verifierMiseAJour()" style="border-top: 1px solid #ddd; color: #27ae60; font-weight: bold;">🔄 Vérifier mise à jour</button>
                         
-                        <button onclick="lancerMajAjax('update_gps', this)" style="border-top: 1px solid #ddd;">📍 Maj GPS</button>
+                        <!-- Nouveauté 1.6.6 : Bouton de mise à jour des distances par la ville -->
+                        <button onclick="lancerMajAjax('update_distances_manquantes', this)" style="border-top: 1px solid #ddd;" title="Calcule les distances pour les entreprises sans coordonnées, via leur Code Postal / Ville (Max 25 par clic).">🌐 Maj Distances (Villes)</button>
+                        <button onclick="lancerMajAjax('update_gps', this)">📍 Maj GPS</button>
                         <button onclick="lancerMajAjax('update_naf', this)">📚 Maj NAF</button>
                         <button onclick="lancerMajAjax('update_alimentaire', this)">🔄 Maj Alim.</button>
                         <button onclick="lancerMajAjax('update_sante', this)">🏥 Maj Santé</button>

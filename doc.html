@@ -32,7 +32,7 @@
 
     <div class="meta-info">
         <strong>Projet :</strong> Moteur de qualification RSE, calcul d'empreinte carbone Scope 3 et analyse du risque<br>
-        <strong>Version :</strong> 1.6.1 (Août 2026)<br>
+        <strong>Version :</strong> 1.6.6 (Août 2026)<br>
         <strong>Environnement :</strong> Docker / ZimaOS / LAMP (PHP 8.2, Apache, MySQL 8.0)<br>
         <strong>Auteur :</strong> David NAU
     </div>
@@ -42,11 +42,12 @@
     <ul>
         <li>Importation de fichiers CSV (Nom seul, ou enrichi avec Montants € et Poids kg).</li>
         <li>Interrogation d'API officielles et privées (Gouv.fr, Pappers, Societe.com, OpenData BODACC).</li>
-        <li>Calcul automatique du kilométrage routier (OSRM) et géocodage mondial de secours (OpenStreetMap).</li>
+        <li>Calcul automatique du kilométrage routier (OSRM) et géocodage mondial avec système de secours par ville (OpenStreetMap).</li>
         <li>Détection des labels RSE : Secteur Alimentaire, ESS (Économie Sociale et Solidaire), Société à Mission.</li>
-        <li>Calculateur d'émissions de CO2 estimées (Ratios monétaires ADEME par grandes familles NAF + Fret Tonnes-Kilomètres).</li>
+        <li>Intégration du dictionnaire officiel de l'INSEE pour une précision absolue des secteurs d'activité (NAF).</li>
+        <li>Calculateur d'émissions de CO2 estimées (Ratios monétaires ADEME par secteur + Fret Tonnes-Kilomètres).</li>
         <li>Module d'analyse du risque financier avec modale interactive d'affichage des annonces légales BODACC.</li>
-        <li>Outils de traitement de masse (Surlignage de SIREN connus via CSV) et mise à jour transparente de l'interface.</li>
+        <li>Outils de traitement de masse (Surlignage de SIREN connus via CSV) et maintenance des données en un clic.</li>
         <li>Mise à jour "Over-The-Air" (Auto-Updater) via synchronisation avec un dépôt GitHub.</li>
         <li>Dashboard RSE interactif avec cartes mondiales (Leaflet) et graphiques analytiques (Chart.js).</li>
     </ul>
@@ -84,14 +85,9 @@
         <li><strong>Services, Numérique, Immobilier (NAF 61 à 63, 69 à 71) :</strong> 0,05 kg de CO2 / € <em>(Impact faible : prestations intellectuelles)</em>.</li>
         <li><strong>Par défaut (Autres secteurs) :</strong> 0,20 kg de CO2 / € <em>(Moyenne nationale générique)</em>.</li>
     </ul>
-    
-    <div class="zimaos-note">
-        <strong>💡 Validation de la méthode :</strong><br>
-        Bien qu'il s'agisse d'une estimation ("par proxy" sectoriel) et non d'une Analyse de Cycle de Vie (ACV) au gramme près, cette méthodologie est <strong>totalement validée par les normes internationales (GHG Protocol)</strong>. Elle permet de cartographier de manière fiable les principaux postes d'émissions de la chaîne d'approvisionnement.
-    </div>
 
-    <h2>5. Modèle de Données et Sauvegardes Dump SQL</h2>
-    <p>Deux tables principales constituent le cœur de la base : <code>sources_csv</code> et <code>api_resultats</code>.</p>
+    <h2>5. Modèle de Données et Sauvegardes</h2>
+    <p>Trois tables principales constituent le cœur de la base : <code>sources_csv</code>, <code>api_resultats</code>, et <code>codes_naf</code>.</p>
     <ul>
         <li><strong>Sauvegarde (Export SQL) :</strong> Le menu d'actions permet de générer à tout moment un dump SQL complet avec la clause <code>CREATE TABLE IF NOT EXISTS</code>.</li>
         <li><strong>Restauration (Import SQL) :</strong> Le bouton "📂 Importer Dump (SQL)" permet d'injecter un fichier <code>.sql</code> pour restaurer instantanément l'état de l'application sur n'importe quel serveur.</li>
@@ -100,12 +96,12 @@
     <h2>6. Guide d'Installation</h2>
     <p>EcoTrace 🍃 est conçu pour être auto-suffisant. L'application déclenche automatiquement un assistant de configuration et génère ses tables de base de données au premier lancement.</p>
 
-    <h3>A. Installation via Docker & ZimaOS (Recommandée)</h3>
     <div class="zimaos-note">
-        <strong>💡 Installation en 1 clic sur ZimaOS / CasaOS :</strong><br>
-        Copiez-collez le code ci-dessous dans le module "Custom Install" de ZimaOS ou dans un fichier <code>docker-compose.yml</code> classique.
+        <strong>💡 Astuce Pro (Dictionnaire NAF) :</strong><br>
+        Pour bénéficier immédiatement des libellés exacts des secteurs d'activité, placez le fichier <code>insee.codenaf.csv</code> à la racine du projet (au même niveau que <code>index.php</code>) <strong>avant</strong> l'installation initiale. L'assistant l'importera automatiquement !
     </div>
 
+    <h3>Installation via Docker & ZimaOS (Recommandée)</h3>
 <pre><code>name: ecotrace
 services:
   web:
@@ -140,71 +136,47 @@ volumes:
   ecotrace_db_data:
     driver: local</code></pre>
 
-    <h3>B. Installation sur un serveur Apache standard (LAMP / WAMP / XAMPP)</h3>
-    <ol>
-        <li><strong>Prérequis :</strong> Un serveur web avec Apache, PHP 8.1 ou supérieur (avec les extensions <code>pdo_mysql</code> et <code>curl</code> activées), le paquet <code>git</code> installé sur la machine hôte, et un serveur MySQL ou MariaDB fonctionnel.</li>
-        <li><strong>Déploiement :</strong> Copiez tous les fichiers du projet dans le répertoire public de votre serveur web (ex: <code>/var/www/html/ecotrace</code>).</li>
-        <li><strong>Permissions :</strong> Assurez-vous que l'utilisateur exécutant Apache possède les droits d'écriture sur ce dossier.</li>
-        <li><strong>Lancement :</strong> Ouvrez votre navigateur et accédez à l'URL correspondante. L'assistant de configuration s'affichera pour paramétrer le fichier <code>.env</code>.</li>
-    </ol>
-
     <h2>7. Mises à jour automatiques et Token GitHub</h2>
-    <p>EcoTrace intègre un système "Auto-Updater" qui lui permet de vérifier la disponibilité d'une nouvelle version sur un dépôt GitHub et de s'auto-mettre à jour en un clic (en utilisant la commande <code>git reset --hard</code>). Étant donné que le dépôt est privé, il est nécessaire de générer un <strong>Personal Access Token (PAT)</strong> sur GitHub pour autoriser EcoTrace à s'y connecter en silence.</p>
+    <p>EcoTrace intègre un système "Auto-Updater" qui lui permet de s'auto-mettre à jour en un clic via GitHub. Étant donné que le dépôt est privé, il est nécessaire de générer un <strong>Personal Access Token (PAT)</strong> sur GitHub pour autoriser EcoTrace à s'y connecter en silence.</p>
     
     <div class="warning-note">
         <strong>⚠️ Règle de Sécurité Absolue :</strong><br>
-        Le jeton secret ne doit <strong>jamais</strong> être écrit dans le code source de l'application (sous peine d'être bloqué par la sécurité "Push Protection" de GitHub). Il doit être inséré uniquement via l'interface de configuration d'EcoTrace, qui le stockera dans le fichier local caché <code>.env</code> (ignoré par Git grâce au fichier <code>.gitignore</code>).
+        Le jeton secret ne doit <strong>jamais</strong> être écrit dans le code source de l'application (sous peine d'être bloqué par la sécurité de GitHub). Il doit être inséré uniquement via l'interface de configuration d'EcoTrace, qui le stockera dans le fichier local caché <code>.env</code>.
     </div>
 
     <h3>Étape 1 : Générer le Jeton (Token) sur GitHub</h3>
     <ol>
-        <li>Connectez-vous à votre compte sur <a href="https://github.com" target="_blank" style="color: #3498db; text-decoration: none;">GitHub</a>.</li>
-        <li>Cliquez sur votre photo de profil (en haut à droite), puis allez dans <strong>Settings (Paramètres)</strong>.</li>
-        <li>Dans le menu de gauche, descendez tout en bas et cliquez sur <strong>Developer settings</strong>.</li>
-        <li>Déroulez la section <strong>Personal access tokens</strong> et choisissez <strong>Tokens (classic)</strong>.</li>
-        <li>Cliquez sur <strong>Generate new token (classic)</strong>.</li>
-        <li>Remplissez les informations :
-            <ul>
-                <li><strong>Note :</strong> <code>Auto-Updater EcoTrace</code></li>
-                <li><strong>Expiration :</strong> <code>No expiration</code> (Recommandé pour ne pas casser l'auto-updater).</li>
-                <li><strong>Scopes :</strong> Cochez <u>uniquement</u> la case <strong><code>repo</code></strong> (permet de lire votre dépôt privé).</li>
-            </ul>
-        </li>
-        <li>Cliquez sur le bouton vert <strong>Generate token</strong> tout en bas.</li>
-        <li><strong>Copiez immédiatement</strong> la chaîne de caractères verte (ex: <code>ghp_A1b2C3d4...</code>). GitHub ne la réaffichera plus !</li>
+        <li>Connectez-vous sur GitHub et allez dans <strong>Settings (Paramètres)</strong> > <strong>Developer settings</strong>.</li>
+        <li>Déroulez <strong>Personal access tokens</strong> et choisissez <strong>Tokens (classic)</strong>.</li>
+        <li>Cliquez sur <strong>Generate new token (classic)</strong> avec <code>No expiration</code> et cochez <u>uniquement</u> la case <strong><code>repo</code></strong>.</li>
+        <li><strong>Copiez immédiatement</strong> le jeton généré (ex: <code>ghp_A1b2C3d4...</code>).</li>
     </ol>
 
     <h3>Étape 2 : Configurer le lien dans EcoTrace</h3>
     <p>L'URL standard de votre dépôt ressemble à :<br><code>https://github.com/votre-compte/ecotrace.git</code></p>
-    <p>Pour y inclure l'autorisation silencieuse, ajoutez votre jeton suivi d'un <code>@</code> juste avant <code>github.com</code> :<br>
+    <p>Ajoutez votre jeton suivi d'un <code>@</code> juste avant <code>github.com</code> :<br>
     <code style="word-break: break-all;">https://ghp_A1b2C3d4...@github.com/votre-compte/ecotrace.git</code></p>
-    <ol>
-        <li>Ouvrez EcoTrace, ouvrez le menu <strong>⚙️ Actions ▾</strong> et cliquez sur <strong>⚙️ Éditer la configuration</strong>.</li>
-        <li>Collez cette URL modifiée dans le champ <strong>Lien dépôt GitHub (Auto-Updater)</strong>.</li>
-        <li>Cliquez sur <strong>💾 Enregistrer et Continuer</strong>.</li>
-    </ol>
-    <p>Désormais, EcoTrace vérifiera automatiquement la disponibilité des mises à jour (un badge clignotant rouge <em>"Mise à jour disponible !"</em> s'affichera à côté du numéro de version si nécessaire).</p>
+    <p>Ouvrez le menu <strong>⚙️ Actions ▾</strong> d'EcoTrace, cliquez sur <strong>⚙️ Éditer la configuration</strong>, et collez cette URL dans le champ dédié.</p>
 
-    <h2>8. Outils de Rapprochement et Ajout Manuel</h2>
-    <p>Pour fluidifier le travail de l'utilisateur, plusieurs fonctionnalités ergonomiques ont été intégrées dans les onglets de Rapprochement et d'Ajout Manuel :</p>
+    <h2>8. Outils de Rapprochement et Maintenance</h2>
     
     <h3>A. Maintien de la position de navigation (Scroll)</h3>
-    <p>Lorsque vous traitez une longue liste d'entreprises en attente (clic sur un bouton API, validation d'un candidat, suppression), l'application sauvegarde instantanément votre position de défilement (scroll) en mémoire. Au rechargement de la page, vous êtes replacé exactement au même endroit, évitant ainsi d'avoir à redescendre toute la liste.</p>
+    <p>Lorsque vous traitez une entreprise (validation, recherche, suppression), l'application sauvegarde instantanément votre position de défilement. Au rechargement, vous êtes replacé exactement au même endroit, ce qui est idéal pour les longues listes.</p>
     
     <h3>B. Suppression rapide d'une requête (🗑️)</h3>
-    <p>Dans l'onglet "Rapprochement", un bouton rouge <strong>Corbeille</strong> (🗑️) est disponible à côté des boutons d'API pour chaque entité. Il permet d'écarter et de supprimer définitivement de la base de données un nom jugé non pertinent (ou mal importé), sans avoir besoin de passer par un état "Introuvable".</p>
+    <p>Dans l'onglet "Rapprochement", un bouton rouge <strong>Corbeille</strong> (🗑️) est disponible pour écarter et supprimer définitivement de la base de données une ligne importée par erreur ou inutile.</p>
 
     <h3>C. Surlignage via SIREN (Fichier CSV)</h3>
-    <p>Ce bouton situé dans le menu <strong>⚙️ Actions ▾</strong> permet d'importer rapidement un fichier CSV (ou un fichier texte) contenant une liste de numéros SIREN avec lesquels vous avez déjà travaillé, ou qui sont déjà qualifiés par ailleurs. L'application scanne instantanément ce fichier et effectue les opérations suivantes :</p>
-    <ul>
-        <li>Elle identifie tous les numéros à 9 chiffres.</li>
-        <li>Elle compare ces numéros avec les entreprises proposées dans l'onglet "Rapprochement".</li>
-        <li>Elle surligne les correspondances avec un <strong>fond vert pastel</strong>, ce qui permet à l'utilisateur de savoir visuellement quel candidat choisir.</li>
-        <li>Elle enregistre cette "connaissance" dans la base de données de manière persistante.</li>
-    </ul>
+    <p>Le bouton <strong>✨ Surligner via SIREN (CSV)</strong> permet d'importer une liste de numéros SIREN de partenaires connus. L'application mettra en évidence (fond vert) les candidats correspondants dans la file d'attente et mémorisera cette information en base de données.</p>
 
     <h3>D. Contournement de l'API (Saisie manuelle directe)</h3>
-    <p>Dans l'onglet "➕ Ajout Manuel", vous pouvez lancer une vérification via Gouv.fr pour vérifier la présence d'une entreprise avant de l'importer. Toutefois, si vous savez que l'entité n'est pas répertoriée (fournisseur étranger, association non déclarée...), vous pouvez utiliser le bouton <strong>✏️ Saisie manuelle directe</strong>. Ce bouton permet de forcer l'affichage du formulaire et de créer l'entité dans la base d'EcoTrace sans interroger les serveurs de l'État.</p>
+    <p>Dans l'onglet "➕ Ajout Manuel", vous pouvez utiliser le bouton <strong>✏️ Saisie manuelle directe</strong> pour forcer l'affichage du formulaire et créer une entité sans interroger l'API Gouv.fr (utile pour les associations non déclarées ou les partenaires étrangers).</p>
+
+    <h3>E. Géocodage de Secours et Mise à jour des Distances</h3>
+    <p>Si l'adresse précise (rue) d'un fournisseur n'est pas reconnue par le routeur GPS (OSRM), EcoTrace bascule automatiquement sur un <strong>Géocodage de Secours</strong> ciblant le centre de sa ville/code postal. Si des entités ont été importées par le passé sans qu'une distance ait pu être calculée, vous pouvez cliquer sur <strong>🌐 Maj Distances (Villes)</strong> dans le menu d'actions pour réparer et recalculer ces distances manquantes de manière rétroactive (traitement par lots de 25 pour préserver les API publiques).</p>
+
+    <h3>F. Gestion du Dictionnaire NAF</h3>
+    <p>EcoTrace utilise une table dédiée pour stocker la nomenclature officielle de l'INSEE. Si le fichier <code>insee.codenaf.csv</code> n'était pas présent lors de l'installation, vous pouvez l'injecter à tout moment via le bouton <strong>📚 Importer Dictionnaire NAF (CSV)</strong>. Ensuite, un clic sur <strong>📚 Maj NAF</strong> mettra à jour tous les libellés des entreprises de votre base pour qu'ils soient d'une précision absolue.</p>
 
 </div>
 
