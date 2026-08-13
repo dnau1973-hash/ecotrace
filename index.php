@@ -1,6 +1,6 @@
 <?php
 /**
- * EcoTrace 🍃 - Version 1.6.1
+ * EcoTrace 🍃 - Version 1.6.2
  * 
  * Copyright (C) 2026 David NAU <dnau.1973@gmail.com>
  * 
@@ -45,6 +45,7 @@ $admin_user = $env['ADMIN_USER'] ?? 'admin';
 $admin_pass = $env['ADMIN_PASS'] ?? 'admin';
 $pappers_key = trim($env['PAPPERS_API_KEY'] ?? '');
 $societe_key = trim($env['SOCIETE_API_KEY'] ?? '');
+// URL GitHub intégrée par défaut SANS le token (sécurité)
 $github_repo = trim($env['GITHUB_REPO'] ?? 'https://github.com/dnau1973-hash/ecotrace.git');
 $origineLat = $env['ORIGIN_LAT'] ?? 45.19165526;
 $origineLon = $env['ORIGIN_LON'] ?? 0.76262712;
@@ -79,7 +80,7 @@ if (!file_exists($envFile) || $is_editing_config) {
     <body>
         <div class="install-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.6.1</div>
+            <div class="app-version">Version 1.6.2</div>
             <p style="text-align:center; color:#666;"><?= $is_editing_config ? "Modification des paramètres de configuration." : "Veuillez configurer les paramètres avant l'installation." ?></p>
             <form method="POST" action="?">
                 <input type="hidden" name="setup_env_action" value="1">
@@ -158,7 +159,7 @@ if (empty($_SESSION['ecotrace_logged_in'])) {
     <body>
         <div class="login-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.6.1</div>
+            <div class="app-version">Version 1.6.2</div>
             <p>Veuillez vous identifier</p>
             <?php if (isset($login_error)) echo "<div class='error'>$login_error</div>"; ?>
             <form method="POST">
@@ -177,6 +178,7 @@ if (empty($_SESSION['ecotrace_logged_in'])) {
 // 2.5 AUTO-UPDATER GITHUB
 // =========================================================================
 
+// Vérifier la mise à jour
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'check_github_update') {
     header('Content-Type: application/json');
     if (empty($github_repo)) { echo json_encode(['success' => false, 'message' => 'Le lien du dépôt GitHub n\'est pas configuré dans les paramètres.']); exit; }
@@ -200,6 +202,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     exit;
 }
 
+// Exécuter la mise à jour avec protection du .env
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'do_github_update') {
     header('Content-Type: application/json');
     if (empty($github_repo)) { echo json_encode(['success' => false, 'message' => 'Le lien GitHub n\'est pas configuré.']); exit; }
@@ -250,8 +253,9 @@ try {
             try { $pdo->exec("ALTER TABLE sources_csv ADD COLUMN poids DECIMAL(10,2) DEFAULT 0 AFTER montant"); } catch (PDOException $e) {}
             try { $pdo->exec("ALTER TABLE api_resultats ADD COLUMN est_ess TINYINT(1) DEFAULT 0 AFTER est_alimentaire"); } catch (PDOException $e) {}
             try { $pdo->exec("ALTER TABLE api_resultats ADD COLUMN est_societe_mission TINYINT(1) DEFAULT 0 AFTER est_ess"); } catch (PDOException $e) {}
-            // Ajout de la colonne pour le surlignage persistant en v1.6.1
             try { $pdo->exec("ALTER TABLE api_resultats ADD COLUMN est_connu TINYINT(1) DEFAULT 0 AFTER est_societe_mission"); } catch (PDOException $e) {}
+            // Table Dictionnaire NAF
+            try { $pdo->exec("CREATE TABLE IF NOT EXISTS codes_naf (code VARCHAR(10) PRIMARY KEY, libelle VARCHAR(255)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"); } catch (PDOException $e) {}
         }
     }
 } catch (PDOException $e) {
@@ -298,21 +302,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_action'])) {
             FOREIGN KEY (source_id) REFERENCES sources_csv(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+        CREATE TABLE IF NOT EXISTS codes_naf (
+            code VARCHAR(10) PRIMARY KEY, 
+            libelle VARCHAR(255)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
         ALTER TABLE sources_csv ADD CONSTRAINT fk_resultat_valide FOREIGN KEY (api_result_id_selectionne) REFERENCES api_resultats(id) ON DELETE SET NULL;
         ";
         $pdoServer->exec($sql);
         header("Location: ?"); exit;
     } catch (PDOException $e) { die("Erreur d'installation : " . htmlspecialchars($e->getMessage() ?? '')); }
-}
-
-if ($needsInstall) {
-    ?>
-    <!DOCTYPE html>
-    <html lang="fr">
-    <head><meta charset="UTF-8"><title>EcoTrace 🍃 - Installation</title><link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
-    <style>body { font-family: 'Nunito', sans-serif; background: #f4f7f6; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; } .install-box { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-align: center; } button { background: #3498db; color: white; border: none; padding: 12px 20px; border-radius: 4px; cursor: pointer; font-size: 16px; margin-top: 20px; font-weight: bold; font-family: 'Nunito', sans-serif;} button:hover { background: #2980b9; }</style></head>
-    <body><div class="install-box"><h1 style="color:#27ae60; margin:0;">EcoTrace 🍃</h1><p>La base <strong><?= htmlspecialchars($db_name ?? '') ?></strong> est introuvable.</p><form method="POST"><input type="hidden" name="install_action" value="1"><button type="submit">⚙️ Installer l'architecture</button></form></div></body></html>
-    <?php exit;
 }
 
 // =========================================================================
@@ -361,16 +360,18 @@ if (isset($_GET['export']) && $_GET['export'] === 'sql') {
     header('Content-Disposition: attachment; filename=ecotrace_dump_' . date('Ymd_His') . '.sql');
     $output = fopen('php://output', 'w');
     fwrite($output, "-- Dump SQL EcoTrace 🍃 (Généré le : " . date('Y-m-d H:i:s') . ")\nSET FOREIGN_KEY_CHECKS = 0;\n\n");
-    foreach (['sources_csv', 'api_resultats'] as $table) {
+    foreach (['sources_csv', 'api_resultats', 'codes_naf'] as $table) {
         $stmt = $pdo->query("SHOW CREATE TABLE `$table`");
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        fwrite($output, str_replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS', $row['Create Table']) . ";\n\n");
-        $rows = $pdo->query("SELECT * FROM `$table`")->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($rows as $r) {
-            $vals = array_map(function($val) use ($pdo) { return $val === null ? 'NULL' : $pdo->quote($val); }, array_values($r));
-            fwrite($output, "INSERT INTO `$table` (`" . implode("`, `", array_keys($r)) . "`) VALUES (" . implode(", ", $vals) . ");\n");
+        if ($row) {
+            fwrite($output, str_replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS', $row['Create Table']) . ";\n\n");
+            $rows = $pdo->query("SELECT * FROM `$table`")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $r) {
+                $vals = array_map(function($val) use ($pdo) { return $val === null ? 'NULL' : $pdo->quote($val); }, array_values($r));
+                fwrite($output, "INSERT INTO `$table` (`" . implode("`, `", array_keys($r)) . "`) VALUES (" . implode(", ", $vals) . ");\n");
+            }
+            fwrite($output, "\n");
         }
-        fwrite($output, "\n");
     }
     fwrite($output, "SET FOREIGN_KEY_CHECKS = 1;\n");
     fclose($output); exit;
@@ -419,12 +420,23 @@ function calculerDistance($lat1, $lon1, $lat2, $lon2) {
     return calculerDistanceVolDOiseau($lat1, $lon1, $lat2, $lon2);
 }
 
+// Nouveauté 1.6.2 : Recherche du NAF dans la base de données
 function getLibelleNafLocal($codeNaf) {
+    global $pdo;
     if (empty($codeNaf)) return "Non renseigné";
     $cleanCode = strtoupper(trim(str_replace('.', '', $codeNaf)));
     if (strlen($cleanCode) === 5) $cleanCode = substr($cleanCode, 0, 2) . '.' . substr($cleanCode, 2);
-    $nafTable = ['56.10A' => 'Restauration traditionnelle', '56.10B' => 'Cafétérias', '56.10C' => 'Restauration rapide', '56.21Z' => 'Services des traiteurs', '56.30Z' => 'Débits de boissons', '55.10Z' => 'Hôtels', '10.71C' => 'Boulangerie', '10.71D' => 'Pâtisserie', '01.21Z' => 'Culture de la vigne', '10.11Z' => 'Viande de boucherie', '47.11A' => 'Surgelés', '47.11B' => 'Alimentation générale', '47.11C' => 'Supérettes', '47.11D' => 'Supermarchés', '47.11F' => 'Hypermarchés', '47.21Z' => 'Fruits et légumes', '46.39B' => 'Gros alimentaire'];
-    if (isset($nafTable[$cleanCode])) return $nafTable[$cleanCode];
+    
+    if ($pdo) {
+        try {
+            $stmt = $pdo->prepare("SELECT libelle FROM codes_naf WHERE code = :code LIMIT 1");
+            $stmt->execute([':code' => $cleanCode]);
+            $res = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($res && !empty($res['libelle'])) return $res['libelle'];
+        } catch (Exception $e) {}
+    }
+    
+    // Fallback de sécurité (Dictionnaire des divisions principales si DB vide)
     $divs = ['01' => 'Agriculture et services annexes', '02' => 'Sylviculture', '03' => 'Pêche et aquaculture', '05' => 'Extraction de houille', '06' => 'Extraction d\'hydrocarbures', '07' => 'Extraction de minerais métalliques', '08' => 'Autres industries extractives', '09' => 'Services de soutien extractifs', '10' => 'Industrie alimentaire', '11' => 'Fabrication de boissons', '12' => 'Fabrication de produits à base de tabac', '13' => 'Fabrication de textiles', '14' => 'Industrie de l\'habillement', '15' => 'Industrie du cuir et de la chaussure', '16' => 'Travail du bois', '17' => 'Industrie du papier', '18' => 'Imprimerie', '19' => 'Cokéfaction et raffinage', '20' => 'Industrie chimique', '21' => 'Industrie pharmaceutique', '22' => 'Fabrication de produits en caoutchouc', '23' => 'Fabrication d\'autres produits minéraux non métalliques', '24' => 'Métallurgie', '25' => 'Fabrication de produits métalliques', '26' => 'Fabrication de produits informatiques et électroniques', '27' => 'Fabrication d\'équipements électriques', '28' => 'Fabrication de machines et équipements', '29' => 'Industrie automobile', '30' => 'Fabrication d\'autres matériels de transport', '31' => 'Fabrication de meubles', '32' => 'Autres industries manufacturières', '33' => 'Réparation et installation de machines', '35' => 'Production et distribution d\'électricité, gaz, vapeur', '36' => 'Captage, traitement et distribution d\'eau', '37' => 'Collecte et traitement des eaux usées', '38' => 'Collecte et traitement des déchets', '39' => 'Dépollution', '41' => 'Construction de bâtiments', '42' => 'Génie civil', '43' => 'Travaux de construction spécialisés', '45' => 'Commerce et réparation d\'automobiles', '46' => 'Commerce de gros', '47' => 'Commerce de détail', '49' => 'Transports terrestres', '50' => 'Transports par eau', '51' => 'Transports aériens', '52' => 'Entreposage et services logistiques', '53' => 'Activités de poste et de courrier', '55' => 'Hébergement', '56' => 'Restauration', '58' => 'Édition', '59' => 'Production de films, vidéo et musique', '60' => 'Programmation et diffusion', '61' => 'Télécommunications', '62' => 'Programmation et conseil en informatique', '63' => 'Services d\'information', '64' => 'Activités financières', '65' => 'Assurance', '66' => 'Activités auxiliaires de services financiers', '68' => 'Activités immobilières', '69' => 'Activités juridiques et comptables', '70' => 'Sièges sociaux et conseil de gestion', '71' => 'Architecture et ingénierie', '72' => 'Recherche-développement scientifique', '73' => 'Publicité et études de marché', '74' => 'Autres activités spécialisées, scientifiques et techniques', '75' => 'Activités vétérinaires', '77' => 'Location et location-bail', '78' => 'Activités liées à l\'emploi', '79' => 'Agences de voyage', '80' => 'Enquêtes et sécurité', '81' => 'Services relatifs aux bâtiments et paysagisme', '82' => 'Activités administratives de bureau', '84' => 'Administration publique', '85' => 'Enseignement', '86' => 'Santé humaine', '87' => 'Hébergement médico-social et social', '88' => 'Action sociale sans hébergement', '90' => 'Activités créatives, artistiques et de spectacle', '91' => 'Bibliothèques, archives et musées', '92' => 'Organisation de jeux de hasard', '93' => 'Activités sportives et récréatives', '94' => 'Organisations associatives', '95' => 'Réparation d\'ordinateurs et biens', '96' => 'Autres services personnels', '97' => 'Activités des ménages', '99' => 'Activités extraterritoriales'];
     return $divs[substr($cleanCode, 0, 2)] ?? "Secteur d'activité ($cleanCode)";
 }
@@ -464,7 +476,45 @@ function determinerSanteJuridique($entreprise) {
 // 5. REQUÊTES AJAX
 // =========================================================================
 
-// Mettre en évidence les SIREN en base de données
+// Nouveauté 1.6.2 : Import du dictionnaire NAF (CSV)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'import_naf_csv' && isset($_FILES['naf_file'])) {
+    header('Content-Type: application/json');
+    $file = $_FILES['naf_file']['tmp_name'];
+    if (empty($file)) { echo json_encode(['success' => false, 'message' => "Fichier vide."]); exit; }
+    
+    $handle = fopen($file, "r");
+    if ($handle !== FALSE) {
+        try {
+            $pdo->beginTransaction();
+            $pdo->exec("TRUNCATE TABLE codes_naf;"); // Vide la table pour éviter les doublons
+            $stmt = $pdo->prepare("INSERT IGNORE INTO codes_naf (code, libelle) VALUES (:code, :libelle)");
+            $count = 0;
+            
+            // Détection du délimiteur (; ou ,)
+            $firstLine = fgets($handle);
+            $delim = strpos($firstLine, ';') !== false ? ';' : ',';
+            rewind($handle);
+            
+            $header = fgetcsv($handle, 1000, $delim); // Skip header
+            while (($data = fgetcsv($handle, 1000, $delim)) !== FALSE) {
+                if (isset($data[0]) && isset($data[1])) {
+                    $stmt->execute([':code' => trim($data[0]), ':libelle' => trim($data[1])]);
+                    $count++;
+                }
+            }
+            fclose($handle);
+            $pdo->commit();
+            echo json_encode(['success' => true, 'message' => "$count codes NAF importés avec succès !"]);
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            echo json_encode(['success' => false, 'message' => "Erreur SQL : " . $e->getMessage()]);
+        }
+    } else {
+        echo json_encode(['success' => false, 'message' => "Erreur de lecture du fichier."]);
+    }
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'highlight_sirens') {
     header('Content-Type: application/json');
     $sirens = json_decode($_POST['sirens'] ?? '[]', true);
@@ -878,13 +928,14 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         <div class="header-top">
             <div class="header-title">
                 <h1>EcoTrace 🍃</h1>
-                <div class="app-version-main">v1.6.1</div>
+                <div class="app-version-main">v1.6.2</div>
                 <div id="update-badge" class="update-badge" onclick="verifierMiseAJour()">⚠️ Mise à jour disponible !</div>
             </div>
             <div class="header-actions">
                 <input type="file" id="csv-upload" accept=".csv" style="display: none;" onchange="demarrerImportCSV(event)">
                 <input type="file" id="sql-upload" accept=".sql" style="display: none;" onchange="demarrerImportSQL(event)">
                 <input type="file" id="siren-highlight-upload" accept=".csv" style="display: none;" onchange="highlightSirenFromCSV(event)">
+                <input type="file" id="naf-upload" accept=".csv" style="display: none;" onchange="demarrerImportNAF(event)">
                 
                 <div class="dropdown">
                     <button class="dropbtn">⚙️ Actions ▾</button>
@@ -895,13 +946,15 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                         <button onclick="ouvrirIframeModal('presentation.html')">📽️ Présentation</button>
                         <button onclick="ouvrirIframeModal('historique.html')">🕒 Historique</button>
                         
+                        <!-- Base de données -->
                         <button onclick="document.getElementById('sql-upload').click()" style="border-top: 1px solid #ddd;">📂 Importer Dump (SQL)</button>
                         <a href="?export=sql">💾 Exporter Dump (SQL)</a>
+                        <button onclick="document.getElementById('naf-upload').click()" title="Format attendu : code, libelle">📚 Importer Dictionnaire NAF (CSV)</button>
+                        
+                        <!-- Export / Import CSV -->
                         <button onclick="document.getElementById('csv-upload').click()" style="border-top: 1px solid #ddd;" title="Format : Nom, Montant(€), Poids(kg)">📁 Importer CSV enrichi</button>
                         <a href="?export=csv">📥 Exporter CSV final</a>
-                        
-                        <!-- Nouveauté 1.6.1 : Surlignage via SIREN (Base de données) -->
-                        <button onclick="document.getElementById('siren-highlight-upload').click()" style="border-top: 1px solid #ddd; color: #1abc9c; font-weight: bold;" title="Mettre en évidence et sauvegarder les fournisseurs connus">✨ Surligner via SIREN (CSV)</button>
+                        <button onclick="document.getElementById('siren-highlight-upload').click()" style="color: #1abc9c; font-weight: bold;" title="Mettre en évidence et sauvegarder les fournisseurs connus">✨ Surligner via SIREN (CSV)</button>
 
                         <!-- Maintenance et Mises à jour -->
                         <button onclick="verifierMiseAJour()" style="border-top: 1px solid #ddd; color: #27ae60; font-weight: bold;">🔄 Vérifier mise à jour</button>
@@ -1269,7 +1322,35 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
             if(bounds.length > 1) mapGlobal.fitBounds(bounds, {padding: [30, 30]});
         }
 
-        // Nouveauté 1.6.1 : Surlignage via SIREN avec sauvegarde en base de données
+        // Nouveauté 1.6.2 : Import du Dictionnaire NAF
+        async function demarrerImportNAF(event) {
+            const file = event.target.files[0]; if (!file) return;
+            document.getElementById('import-progress').style.display = 'block';
+            document.getElementById('import-status').innerText = "Importation du dictionnaire NAF en cours...";
+            document.getElementById('import-percent').innerText = "⏳";
+            
+            let formData = new FormData(); 
+            formData.append('action', 'import_naf_csv'); 
+            formData.append('naf_file', file);
+            
+            try {
+                let response = await fetch('', { method: 'POST', body: formData }); 
+                let data = await response.json();
+                if (data.success) { 
+                    document.getElementById('import-status').innerText = "✅ " + data.message; 
+                    setTimeout(() => location.reload(), 2000); 
+                } else { 
+                    alert(data.message); 
+                    document.getElementById('import-progress').style.display = 'none'; 
+                }
+            } catch (err) { 
+                alert("Erreur réseau NAF."); 
+                document.getElementById('import-progress').style.display = 'none'; 
+            }
+            event.target.value = "";
+        }
+
+        // Surlignage via SIREN
         async function highlightSirenFromCSV(event) {
             const file = event.target.files[0];
             if (!file) return;
