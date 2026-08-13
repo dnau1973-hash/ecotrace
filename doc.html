@@ -26,13 +26,14 @@
 </head>
 <body>
 
-<div class="container">    
+<div class="container">
+    <a href="index.php" class="btn-back">⬅ Retour à l'application</a>
 
     <h1>Documentation Technique et Utilisateur : EcoTrace 🍃</h1>
 
     <div class="meta-info">
         <strong>Projet :</strong> Moteur de qualification RSE, calcul d'empreinte carbone Scope 3 et analyse du risque<br>
-        <strong>Version :</strong> 1.6.6 (Août 2026)<br>
+        <strong>Version :</strong> 1.6.7 (Août 2026)<br>
         <strong>Environnement :</strong> Docker / ZimaOS / LAMP (PHP 8.2, Apache, MySQL 8.0)<br>
         <strong>Auteur :</strong> David NAU
     </div>
@@ -42,12 +43,12 @@
     <ul>
         <li>Importation de fichiers CSV (Nom seul, ou enrichi avec Montants € et Poids kg).</li>
         <li>Interrogation d'API officielles et privées (Gouv.fr, Pappers, Societe.com, OpenData BODACC).</li>
-        <li>Calcul automatique du kilométrage routier (OSRM) et géocodage mondial avec système de secours par ville (OpenStreetMap).</li>
+        <li>Calcul automatique du kilométrage routier (OSRM) et géocodage mondial avec <strong>algorithme intelligent de secours</strong> pour les adresses complexes ou étrangères (OpenStreetMap).</li>
         <li>Détection des labels RSE : Secteur Alimentaire, ESS (Économie Sociale et Solidaire), Société à Mission.</li>
         <li>Intégration du dictionnaire officiel de l'INSEE pour une précision absolue des secteurs d'activité (NAF).</li>
         <li>Calculateur d'émissions de CO2 estimées (Ratios monétaires ADEME par secteur + Fret Tonnes-Kilomètres).</li>
         <li>Module d'analyse du risque financier avec modale interactive d'affichage des annonces légales BODACC.</li>
-        <li>Outils de traitement de masse (Surlignage de SIREN connus via CSV) et maintenance des données en un clic.</li>
+        <li>Outils de traitement de masse organisés par <strong>sous-menus</strong> (Surlignage de SIREN, Maj GPS, Maj NAF...).</li>
         <li>Mise à jour "Over-The-Air" (Auto-Updater) via synchronisation avec un dépôt GitHub.</li>
         <li>Dashboard RSE interactif avec cartes mondiales (Leaflet) et graphiques analytiques (Chart.js).</li>
     </ul>
@@ -85,12 +86,17 @@
         <li><strong>Services, Numérique, Immobilier (NAF 61 à 63, 69 à 71) :</strong> 0,05 kg de CO2 / € <em>(Impact faible : prestations intellectuelles)</em>.</li>
         <li><strong>Par défaut (Autres secteurs) :</strong> 0,20 kg de CO2 / € <em>(Moyenne nationale générique)</em>.</li>
     </ul>
+    
+    <div class="zimaos-note">
+        <strong>💡 Validation de la méthode :</strong><br>
+        Bien qu'il s'agisse d'une estimation ("par proxy" sectoriel) et non d'une Analyse de Cycle de Vie (ACV) au gramme près, cette méthodologie est <strong>totalement validée par les normes internationales (GHG Protocol)</strong>. Elle permet de cartographier de manière fiable les principaux postes d'émissions de la chaîne d'approvisionnement.
+    </div>
 
     <h2>5. Modèle de Données et Sauvegardes</h2>
     <p>Trois tables principales constituent le cœur de la base : <code>sources_csv</code>, <code>api_resultats</code>, et <code>codes_naf</code>.</p>
     <ul>
-        <li><strong>Sauvegarde (Export SQL) :</strong> Le menu d'actions permet de générer à tout moment un dump SQL complet avec la clause <code>CREATE TABLE IF NOT EXISTS</code>.</li>
-        <li><strong>Restauration (Import SQL) :</strong> Le bouton "📂 Importer Dump (SQL)" permet d'injecter un fichier <code>.sql</code> pour restaurer instantanément l'état de l'application sur n'importe quel serveur.</li>
+        <li><strong>Sauvegarde (Export SQL) :</strong> Le menu d'actions (sous-menu Exports) permet de générer à tout moment un dump SQL complet avec la clause <code>CREATE TABLE IF NOT EXISTS</code>.</li>
+        <li><strong>Restauration (Import SQL) :</strong> Le bouton "📂 Importer Dump (SQL)" dans les Imports permet d'injecter un fichier <code>.sql</code> pour restaurer instantanément l'état de l'application sur n'importe quel serveur.</li>
     </ul>
 
     <h2>6. Guide d'Installation</h2>
@@ -160,23 +166,28 @@ volumes:
 
     <h2>8. Outils de Rapprochement et Maintenance</h2>
     
-    <h3>A. Maintien de la position de navigation (Scroll)</h3>
-    <p>Lorsque vous traitez une entreprise (validation, recherche, suppression), l'application sauvegarde instantanément votre position de défilement. Au rechargement, vous êtes replacé exactement au même endroit, ce qui est idéal pour les longues listes.</p>
+    <h3>A. Menu "Actions" structuré</h3>
+    <p>Afin de faciliter la navigation, les nombreux outils de gestion sont regroupés par thèmes (Imports, Exports, Traitements) dans des sous-menus qui se déploient par la gauche au survol.</p>
+
+    <h3>B. Maintien de la position de navigation (Scroll)</h3>
+    <p>Lorsque vous traitez une entreprise (validation, recherche unitaire, suppression), l'application sauvegarde instantanément votre position de défilement verticale. Au rechargement, vous êtes replacé exactement au même endroit, ce qui est idéal pour ne pas perdre sa progression dans les longues listes.</p>
     
-    <h3>B. Suppression rapide d'une requête (🗑️)</h3>
+    <h3>C. Suppression rapide d'une requête (🗑️)</h3>
     <p>Dans l'onglet "Rapprochement", un bouton rouge <strong>Corbeille</strong> (🗑️) est disponible pour écarter et supprimer définitivement de la base de données une ligne importée par erreur ou inutile.</p>
 
-    <h3>C. Surlignage via SIREN (Fichier CSV)</h3>
-    <p>Le bouton <strong>✨ Surligner via SIREN (CSV)</strong> permet d'importer une liste de numéros SIREN de partenaires connus. L'application mettra en évidence (fond vert) les candidats correspondants dans la file d'attente et mémorisera cette information en base de données.</p>
+    <h3>D. Surlignage via SIREN (Fichier CSV)</h3>
+    <p>Le bouton <strong>✨ Surligner via SIREN (CSV)</strong> (dans le sous-menu Imports) permet d'importer une liste de numéros SIREN de partenaires connus. L'application mettra en évidence (fond vert) les candidats correspondants dans la file d'attente et mémorisera cette information en base de données pour les futurs rapprochements.</p>
 
-    <h3>D. Contournement de l'API (Saisie manuelle directe)</h3>
-    <p>Dans l'onglet "➕ Ajout Manuel", vous pouvez utiliser le bouton <strong>✏️ Saisie manuelle directe</strong> pour forcer l'affichage du formulaire et créer une entité sans interroger l'API Gouv.fr (utile pour les associations non déclarées ou les partenaires étrangers).</p>
+    <h3>E. Contournement de l'API (Saisie manuelle directe)</h3>
+    <p>Dans l'onglet "➕ Ajout Manuel", vous pouvez utiliser le bouton <strong>✏️ Saisie manuelle directe</strong> pour forcer l'affichage du formulaire et créer une entité sans interroger l'API Gouv.fr (très utile pour les associations non déclarées ou les partenaires étrangers introuvables via SIREN).</p>
 
-    <h3>E. Géocodage de Secours et Mise à jour des Distances</h3>
-    <p>Si l'adresse précise (rue) d'un fournisseur n'est pas reconnue par le routeur GPS (OSRM), EcoTrace bascule automatiquement sur un <strong>Géocodage de Secours</strong> ciblant le centre de sa ville/code postal. Si des entités ont été importées par le passé sans qu'une distance ait pu être calculée, vous pouvez cliquer sur <strong>🌐 Maj Distances (Villes)</strong> dans le menu d'actions pour réparer et recalculer ces distances manquantes de manière rétroactive (traitement par lots de 25 pour préserver les API publiques).</p>
+    <h3>F. Géocodage Intelligent et Badge d'Anomalie (⚠️)</h3>
+    <p>Si l'adresse précise (bâtiment, zone industrielle ou format étranger) d'un fournisseur n'est pas reconnue par le routeur GPS (OSRM), EcoTrace utilise un <strong>Algorithme intelligent (GeocodeSmarter)</strong>. Il va progressivement simplifier l'adresse (en extrayant le Code Postal + Ville, la fin de la phrase ou le nom du pays) pour garantir qu'une distance de fret soit toujours trouvée.</p>
+    <p>Dans l'onglet des entités Validées, si une entité ne possède pas de distance, un badge <strong>⚠️ Anomalie GPS</strong> s'affiche en rouge. <strong>Ce badge est cliquable</strong> : en appuyant dessus, EcoTrace tentera de relancer le calcul de géolocalisation pour cette seule entité de manière transparente.</p>
+    <p>Pour un traitement de masse, vous pouvez utiliser le bouton <strong>🌐 Maj Distances (Villes)</strong> dans le sous-menu "Traitements" qui traitera les anomalies par paquets de 25 entités.</p>
 
-    <h3>F. Gestion du Dictionnaire NAF</h3>
-    <p>EcoTrace utilise une table dédiée pour stocker la nomenclature officielle de l'INSEE. Si le fichier <code>insee.codenaf.csv</code> n'était pas présent lors de l'installation, vous pouvez l'injecter à tout moment via le bouton <strong>📚 Importer Dictionnaire NAF (CSV)</strong>. Ensuite, un clic sur <strong>📚 Maj NAF</strong> mettra à jour tous les libellés des entreprises de votre base pour qu'ils soient d'une précision absolue.</p>
+    <h3>G. Gestion du Dictionnaire NAF</h3>
+    <p>EcoTrace utilise une table dédiée pour stocker la nomenclature officielle de l'INSEE. Si le fichier n'a pas été importé à l'installation, vous pouvez l'injecter via le bouton <strong>📚 Importer Dictionnaire NAF (CSV)</strong>. Ensuite, un clic sur <strong>📚 Maj NAF</strong> (dans Traitements) mettra à jour tous les libellés des entreprises de votre historique pour qu'ils soient conformes à l'INSEE.</p>
 
 </div>
 
