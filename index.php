@@ -1,6 +1,6 @@
 <?php
 /**
- * EcoTrace 🍃 - Version 1.6.62
+ * EcoTrace 🍃 - Version 1.6.63
  * 
  * Copyright (C) 2026 David NAU <dnau.1973@gmail.com>
  * 
@@ -45,7 +45,6 @@ $admin_user = $env['ADMIN_USER'] ?? 'admin';
 $admin_pass = $env['ADMIN_PASS'] ?? 'admin';
 $pappers_key = trim($env['PAPPERS_API_KEY'] ?? '');
 $societe_key = trim($env['SOCIETE_API_KEY'] ?? '');
-// URL GitHub intégrée par défaut SANS le token (sécurité)
 $github_repo = trim($env['GITHUB_REPO'] ?? 'https://github.com/dnau1973-hash/ecotrace.git');
 $origineLat = $env['ORIGIN_LAT'] ?? 45.19165526;
 $origineLon = $env['ORIGIN_LON'] ?? 0.76262712;
@@ -80,7 +79,7 @@ if (!file_exists($envFile) || $is_editing_config) {
     <body>
         <div class="install-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.6.62</div>
+            <div class="app-version">Version 1.6.63</div>
             <p style="text-align:center; color:#666;"><?= $is_editing_config ? "Modification des paramètres de configuration." : "Veuillez configurer les paramètres avant l'installation." ?></p>
             <form method="POST" action="?">
                 <input type="hidden" name="setup_env_action" value="1">
@@ -159,7 +158,7 @@ if (empty($_SESSION['ecotrace_logged_in'])) {
     <body>
         <div class="login-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.6.62</div>
+            <div class="app-version">Version 1.6.63</div>
             <p>Veuillez vous identifier</p>
             <?php if (isset($login_error)) echo "<div class='error'>$login_error</div>"; ?>
             <form method="POST">
@@ -906,7 +905,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 $sourcesEnAttente = $pdo->query("SELECT * FROM sources_csv WHERE statut = 'en_attente' ORDER BY id DESC LIMIT 1000")->fetchAll(PDO::FETCH_ASSOC);
 $sourcesIntrouvables = $pdo->query("SELECT * FROM sources_csv WHERE statut = 'introuvable' ORDER BY id DESC LIMIT 1000")->fetchAll(PDO::FETCH_ASSOC);
 
-// Jointure NAF dynamique (LEFT JOIN) pour l'affichage de l'historique
 $sourcesValides = $pdo->query("
     SELECT s.id as source_id, s.nom_recherche, s.statut, s.date_import, s.montant, s.poids,
            r.id as resultat_id, r.siren, r.nom_complet, r.siege_adresse, r.latitude, r.longitude, r.distance, 
@@ -968,6 +966,14 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         .dropdown-content button:last-child { border-bottom: none; }
         .dropdown-content a:hover, .dropdown-content button:hover { background-color: #f1f1f1; }
         .dropdown:hover .dropdown-content { display: block; }
+
+        .dropdown-submenu { position: relative; display: block; width: 100%; }
+        .dropdown-submenu > button::after { content: " ▸"; float: right; opacity: 0.6; font-size: 12px; margin-top: 2px;}
+        .dropdown-submenu .dropdown-content-sub { display: none; position: absolute; right: 100%; top: 0; margin-right: 1px; background-color: #ffffff; min-width: 260px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); border-radius: 4px; overflow: hidden; z-index: 1001; border: 1px solid #eee; }
+        .dropdown-submenu:hover .dropdown-content-sub { display: block; }
+        .dropdown-content-sub a, .dropdown-content-sub button { color: #333; padding: 12px 16px; text-decoration: none; display: block; width: 100%; text-align: left; border: none; background: none; cursor: pointer; font-size: 14px; border-bottom: 1px solid #eee; box-sizing: border-box; font-family: 'Nunito', sans-serif; }
+        .dropdown-content-sub button:last-child, .dropdown-content-sub a:last-child { border-bottom: none; }
+        .dropdown-content-sub a:hover, .dropdown-content-sub button:hover { background-color: #f1f1f1; }
         
         .tab-container { margin-bottom: 20px; border-bottom: 2px solid #ddd; display: flex; gap: 10px; }
         .tab-button { font-family: 'Nunito', sans-serif; background: #eee; border: none; padding: 10px 20px; cursor: pointer; font-size: 16px; border-radius: 5px 5px 0 0; color: #555; }
@@ -1021,7 +1027,6 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         .close-modal { color: #aaa; font-size: 28px; font-weight: bold; cursor: pointer; line-height: 1; }
         .close-modal:hover { color: #333; }
         
-        /* Highlight SIREN matching persisté */
         tr.highlight-siren > td { background-color: #d1f2eb !important; border-top: 2px solid #1abc9c; border-bottom: 2px solid #1abc9c; }
         
         /* Formulaires alignés */
@@ -1053,7 +1058,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         <div class="header-top">
             <div class="header-title">
                 <h1>EcoTrace 🍃</h1>
-                <div class="app-version-main">v1.6.62</div>
+                <div class="app-version-main">v1.6.63</div>
                 <div id="update-badge" class="update-badge" onclick="verifierMiseAJour()">⚠️ Mise à jour disponible !</div>
             </div>
             <div class="header-actions">
@@ -1065,26 +1070,46 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                 <div class="dropdown">
                     <button class="dropbtn">⚙️ Actions ▾</button>
                     <div class="dropdown-content">
+                        <!-- Liens d'information en Iframe -->
                         <button onclick="ouvrirIframeModal('doc.html')">📖 Documentation</button>
                         <button onclick="ouvrirIframeModal('licence.html')">📜 Licence</button>
                         <button onclick="ouvrirIframeModal('presentation.html')">📽️ Présentation</button>
                         <button onclick="ouvrirIframeModal('historique.html')">🕒 Historique</button>
                         
-                        <button onclick="document.getElementById('sql-upload').click()" style="border-top: 1px solid #ddd;">📂 Importer Dump (SQL)</button>
-                        <a href="?export=sql">💾 Exporter Dump (SQL)</a>
-                        <button onclick="document.getElementById('naf-upload').click()" title="Format attendu : code, libelle">📚 Importer Dictionnaire NAF (CSV)</button>
-                        
-                        <button onclick="document.getElementById('csv-upload').click()" style="border-top: 1px solid #ddd;" title="Format : Nom, Montant(€), Poids(kg)">📁 Importer CSV enrichi</button>
-                        <a href="?export=csv">📥 Exporter CSV final</a>
-                        <button onclick="document.getElementById('siren-highlight-upload').click()" style="color: #1abc9c; font-weight: bold;" title="Mettre en évidence et sauvegarder les fournisseurs connus">✨ Surligner via SIREN (CSV)</button>
+                        <!-- Sous-Menu : Imports -->
+                        <div class="dropdown-submenu" style="border-top: 1px solid #ddd;">
+                            <button class="dropdown-submenu-btn">📥 Imports</button>
+                            <div class="dropdown-content-sub">
+                                <button onclick="document.getElementById('csv-upload').click()" title="Format : Nom, Montant(€), Poids(kg)">📁 Importer CSV enrichi</button>
+                                <button onclick="document.getElementById('siren-highlight-upload').click()" style="color: #1abc9c; font-weight: bold;" title="Mettre en évidence et sauvegarder les fournisseurs connus">✨ Surligner via SIREN (CSV)</button>
+                                <button onclick="document.getElementById('naf-upload').click()" title="Format attendu : code, libelle">📚 Importer Dictionnaire NAF</button>
+                                <button onclick="document.getElementById('sql-upload').click()">📂 Importer Dump (SQL)</button>
+                            </div>
+                        </div>
 
-                        <button onclick="verifierMiseAJour()" style="border-top: 1px solid #ddd; color: #27ae60; font-weight: bold;">🔄 Vérifier mise à jour</button>
-                        
-                        <button onclick="lancerMajAjax('update_distances_manquantes', this)" style="border-top: 1px solid #ddd;" title="Calcule les distances pour les entreprises sans coordonnées, via leur Code Postal / Ville (Max 25 par clic).">🌐 Maj Distances (Villes)</button>
-                        <button onclick="lancerMajAjax('update_gps', this)">📍 Maj GPS</button>
-                        <button onclick="lancerMajAjax('update_naf', this)">📚 Maj NAF</button>
-                        <button onclick="lancerMajAjax('update_alimentaire', this)">🔄 Maj Alim.</button>
-                        <button onclick="lancerMajAjax('update_sante', this)">🏥 Maj Santé</button>
+                        <!-- Sous-Menu : Exports -->
+                        <div class="dropdown-submenu">
+                            <button class="dropdown-submenu-btn">📤 Exports</button>
+                            <div class="dropdown-content-sub">
+                                <a href="?export=csv">📥 Exporter CSV final</a>
+                                <a href="?export=sql">💾 Exporter Dump (SQL)</a>
+                            </div>
+                        </div>
+
+                        <!-- Sous-Menu : Traitements (Mises à jour) -->
+                        <div class="dropdown-submenu">
+                            <button class="dropdown-submenu-btn">🔄 Traitements (Maj)</button>
+                            <div class="dropdown-content-sub">
+                                <button onclick="lancerMajAjax('update_distances_manquantes', this)" title="Calcule les distances pour les entreprises sans coordonnées, via leur Code Postal / Ville (Max 25 par clic).">🌐 Maj Distances (Villes)</button>
+                                <button onclick="lancerMajAjax('update_gps', this)">📍 Maj GPS (Total)</button>
+                                <button onclick="lancerMajAjax('update_naf', this)">📚 Maj NAF</button>
+                                <button onclick="lancerMajAjax('update_alimentaire', this)">🔄 Maj Alim.</button>
+                                <button onclick="lancerMajAjax('update_sante', this)">🏥 Maj Santé</button>
+                            </div>
+                        </div>
+
+                        <!-- Configuration et Déconnexion -->
+                        <button onclick="verifierMiseAJour()" style="border-top: 1px solid #ddd; color: #27ae60; font-weight: bold;">🔄 Vérifier mise à jour App</button>
                         
                         <button style="color: #e67e22; font-weight: bold; border-top: 1px solid #ddd;" onclick="viderBase()">🧹 Vider la base (Tables)</button>
                         <button style="color: #e74c3c; font-weight: bold;" onclick="reinstallationComplete()">🔥 Réinstallation complète</button>
@@ -1240,7 +1265,6 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                                         <strong><?= htmlspecialchars($valide['nom_complet'] ?? '') ?></strong>
                                         <span class="sante-badge <?= $sClass ?>" style="margin-left: 8px;" onclick="voirAnnonceSante('<?= $valide['siren'] ?>', '<?= htmlspecialchars(addslashes($valide['nom_complet'] ?? '')) ?>')" title="Cliquer pour voir les détails juridiques officiels"><?= htmlspecialchars($sJ) ?> 🔍</span>
                                         
-                                        <!-- Nouveauté 1.6.62 : Indicateur visuel cliquable d'anomalie de distance -->
                                         <?php if (empty($valide['distance']) || $valide['distance'] <= 0): ?>
                                             <span class="badge badge-red" style="margin-left: 8px; background-color: #c0392b; cursor: pointer;" title="Cliquez ici pour calculer la distance via la ville" onclick="lancerMajAjax('update_distances_manquantes', this)">⚠️ Anomalie GPS</span>
                                         <?php endif; ?>
