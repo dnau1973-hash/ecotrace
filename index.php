@@ -1,6 +1,6 @@
 <?php
 /**
- * EcoTrace 🍃 - Version 1.5.41
+ * EcoTrace 🍃 - Version 1.6.0
  * 
  * Copyright (C) 2026 David NAU <dnau.1973@gmail.com>
  * 
@@ -80,7 +80,7 @@ if (!file_exists($envFile) || $is_editing_config) {
     <body>
         <div class="install-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.5.41</div>
+            <div class="app-version">Version 1.6.0</div>
             <p style="text-align:center; color:#666;"><?= $is_editing_config ? "Modification des paramètres de configuration." : "Veuillez configurer les paramètres avant l'installation." ?></p>
             <form method="POST" action="?">
                 <input type="hidden" name="setup_env_action" value="1">
@@ -159,7 +159,7 @@ if (empty($_SESSION['ecotrace_logged_in'])) {
     <body>
         <div class="login-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.5.41</div>
+            <div class="app-version">Version 1.6.0</div>
             <p>Veuillez vous identifier</p>
             <?php if (isset($login_error)) echo "<div class='error'>$login_error</div>"; ?>
             <form method="POST">
@@ -866,6 +866,9 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         .close-modal { color: #aaa; font-size: 28px; font-weight: bold; cursor: pointer; line-height: 1; }
         .close-modal:hover { color: #333; }
         
+        /* Highlight SIREN matching (v1.6.0) */
+        tr.highlight-siren > td { background-color: #d1f2eb !important; border-top: 2px solid #1abc9c; border-bottom: 2px solid #1abc9c; }
+        
         /* Formulaires alignés (Enrichissement & Ajout Manuel) */
         #form-enrich .form-group, #form-ajout-manuel .form-group { display: flex; align-items: center; margin-bottom: 15px; }
         #form-enrich .form-group label, #form-ajout-manuel .form-group label { width: 190px; margin-bottom: 0; flex-shrink: 0; text-align: left; line-height: 1.2; padding-right: 10px; }
@@ -895,12 +898,13 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         <div class="header-top">
             <div class="header-title">
                 <h1>EcoTrace 🍃</h1>
-                <div class="app-version-main">v1.5.41</div>
+                <div class="app-version-main">v1.6.0</div>
                 <div id="update-badge" class="update-badge" onclick="verifierMiseAJour()">⚠️ Mise à jour disponible !</div>
             </div>
             <div class="header-actions">
                 <input type="file" id="csv-upload" accept=".csv" style="display: none;" onchange="demarrerImportCSV(event)">
                 <input type="file" id="sql-upload" accept=".sql" style="display: none;" onchange="demarrerImportSQL(event)">
+                <input type="file" id="siren-highlight-upload" accept=".csv" style="display: none;" onchange="highlightSirenFromCSV(event)">
                 
                 <div class="dropdown">
                     <button class="dropbtn">⚙️ Actions ▾</button>
@@ -916,6 +920,9 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                         <button onclick="document.getElementById('csv-upload').click()" style="border-top: 1px solid #ddd;" title="Format : Nom, Montant(€), Poids(kg)">📁 Importer CSV enrichi</button>
                         <a href="?export=csv">📥 Exporter CSV final</a>
                         
+                        <!-- Nouveauté 1.6.0 : Surlignage via SIREN CSV -->
+                        <button onclick="document.getElementById('siren-highlight-upload').click()" style="border-top: 1px solid #ddd; color: #1abc9c; font-weight: bold;" title="Mettre en évidence les fournisseurs connus">✨ Surligner via SIREN (CSV)</button>
+
                         <!-- Maintenance et Mises à jour -->
                         <button onclick="verifierMiseAJour()" style="border-top: 1px solid #ddd; color: #27ae60; font-weight: bold;">🔄 Vérifier mise à jour</button>
                         
@@ -965,7 +972,6 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                             <br><button class="btn btn-blue btn-small" onclick="lancerRechercheAjax(<?= $source['id'] ?>, true, 'gouv')">🔍 Gouv.fr</button>
                             <button class="btn btn-purple btn-small" onclick="lancerRechercheAjax(<?= $source['id'] ?>, true, 'pappers')">📄 Pappers</button>
                             <button class="btn btn-dark btn-small" onclick="lancerRechercheAjax(<?= $source['id'] ?>, true, 'societe')">🏢 Societe.com</button>
-                            <!-- Bouton Supprimer ajouté dans l'onglet Rapprochement -->
                             <button class="btn btn-red btn-small" onclick="supprimerEnregistrement(<?= $source['id'] ?>)" title="Supprimer cet enregistrement">🗑️</button>
                             <div id="feedback-<?= $source['id'] ?>" class="ajax-feedback" style="display:block; margin-top:5px;"></div>
                         </div>
@@ -985,7 +991,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                             </thead>
                             <tbody>
                                 <?php foreach ($candidats as $candidat): ?>
-                                    <tr>
+                                    <tr data-siren="<?= htmlspecialchars($candidat['siren'] ?? '') ?>">
                                         <td>
                                             <?php $sJ = $candidat['statut_juridique'] ?? 'Actif'; $sClass = ($sJ === 'Fermée' || strpos($sJ, 'Liquidation') !== false) ? 'sante-ferme' : (($sJ !== 'Actif') ? 'sante-difficulte' : 'sante-actif'); ?>
                                             <strong><?= htmlspecialchars($candidat['nom_complet'] ?? '') ?></strong>
@@ -1279,6 +1285,43 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                 circle.bindPopup(m.nom); bounds.push([m.lat, m.lon]);
             });
             if(bounds.length > 1) mapGlobal.fitBounds(bounds, {padding: [30, 30]});
+        }
+
+        // Nouveauté 1.6.0 : Surlignage via SIREN
+        async function highlightSirenFromCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const lines = text.split('\n');
+                let sirens = [];
+                lines.forEach(line => {
+                    line.split(/[,;]/).forEach(cell => {
+                        const clean = cell.replace(/\s+/g, '').replace(/^"|"$/g, '');
+                        if (/^\d{9}$/.test(clean)) sirens.push(clean);
+                    });
+                });
+                
+                if (sirens.length === 0) {
+                    alert("Aucun numéro SIREN valide (9 chiffres continus) n'a été trouvé dans le fichier.");
+                    event.target.value = '';
+                    return;
+                }
+                
+                let count = 0;
+                const rows = document.querySelectorAll('#tab-matching .result-table tbody tr');
+                rows.forEach(row => {
+                    const s = row.getAttribute('data-siren');
+                    if (s && sirens.includes(s)) {
+                        row.classList.add('highlight-siren');
+                        count++;
+                    }
+                });
+                alert(count + " candidat(s) mis en évidence avec succès !");
+            };
+            reader.readAsText(file);
+            event.target.value = '';
         }
 
         async function demarrerImportCSV(event) {
