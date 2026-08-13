@@ -30,6 +30,13 @@
 
     <h1>Historique des versions</h1>
     <p style="color: #666;">Retrouvez ici la liste des modifications, corrections et nouveautés apportées à EcoTrace 🍃.</p>
+
+    <div class="version-block">
+        <h2 class="version-title">Version 1.6.4 <span class="version-date">Août 2026</span></h2>
+        <ul class="changelog-list">
+            <li><span class="badge-fix">Correction</span> <strong>Import NAF :</strong> Résolution du bug de permission base de données (remplacement de <code>TRUNCATE</code> par <code>DELETE</code>) qui provoquait l'annulation de l'import CSV sur certains serveurs MySQL. Les messages d'erreurs critiques sont désormais affichés en clair pour faciliter le diagnostic.</li>
+        </ul>
+    </div>
     
     <div class="version-block">
         <h2 class="version-title">Version 1.6.3 <span class="version-date">Août 2026</span></h2>

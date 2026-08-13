@@ -1,6 +1,6 @@
 <?php
 /**
- * EcoTrace 🍃 - Version 1.6.3
+ * EcoTrace 🍃 - Version 1.6.4
  * 
  * Copyright (C) 2026 David NAU <dnau.1973@gmail.com>
  * 
@@ -45,7 +45,6 @@ $admin_user = $env['ADMIN_USER'] ?? 'admin';
 $admin_pass = $env['ADMIN_PASS'] ?? 'admin';
 $pappers_key = trim($env['PAPPERS_API_KEY'] ?? '');
 $societe_key = trim($env['SOCIETE_API_KEY'] ?? '');
-// URL GitHub intégrée par défaut SANS le token (sécurité)
 $github_repo = trim($env['GITHUB_REPO'] ?? 'https://github.com/dnau1973-hash/ecotrace.git');
 $origineLat = $env['ORIGIN_LAT'] ?? 45.19165526;
 $origineLon = $env['ORIGIN_LON'] ?? 0.76262712;
@@ -80,7 +79,7 @@ if (!file_exists($envFile) || $is_editing_config) {
     <body>
         <div class="install-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.6.3</div>
+            <div class="app-version">Version 1.6.4</div>
             <p style="text-align:center; color:#666;"><?= $is_editing_config ? "Modification des paramètres de configuration." : "Veuillez configurer les paramètres avant l'installation." ?></p>
             <form method="POST" action="?">
                 <input type="hidden" name="setup_env_action" value="1">
@@ -159,7 +158,7 @@ if (empty($_SESSION['ecotrace_logged_in'])) {
     <body>
         <div class="login-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.6.3</div>
+            <div class="app-version">Version 1.6.4</div>
             <p>Veuillez vous identifier</p>
             <?php if (isset($login_error)) echo "<div class='error'>$login_error</div>"; ?>
             <form method="POST">
@@ -471,20 +470,18 @@ function determinerSanteJuridique($entreprise) {
 // 5. REQUÊTES AJAX
 // =========================================================================
 
-// Nouveauté 1.6.3 : Import robuste du dictionnaire NAF (CSV)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'import_naf_csv' && isset($_FILES['naf_file'])) {
     header('Content-Type: application/json');
     $file = $_FILES['naf_file']['tmp_name'];
-    if (empty($file)) { echo json_encode(['success' => false, 'message' => "Le fichier est vide ou n'a pas pu être chargé (vérifiez la taille max dans php.ini)."]); exit; }
+    if (empty($file)) { echo json_encode(['success' => false, 'message' => "Le fichier est vide ou n'a pas pu être chargé."]); exit; }
     
     $handle = fopen($file, "r");
     if ($handle !== FALSE) {
         try {
-            // Forcer la création de la table si elle a été manquée lors de l'installation
             $pdo->exec("CREATE TABLE IF NOT EXISTS codes_naf (code VARCHAR(10) PRIMARY KEY, libelle VARCHAR(255)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
-            
             $pdo->beginTransaction();
-            $pdo->exec("TRUNCATE TABLE codes_naf;"); // Vide la table pour éviter les doublons
+            $pdo->exec("DELETE FROM codes_naf;"); 
+            
             $stmt = $pdo->prepare("INSERT IGNORE INTO codes_naf (code, libelle) VALUES (:code, :libelle)");
             $count = 0;
             
@@ -492,16 +489,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $delim = strpos($firstLine, ';') !== false ? ';' : ',';
             rewind($handle);
             
-            $header = fgetcsv($handle, 1000, $delim); // Skip header
+            $header = fgetcsv($handle, 1000, $delim); 
             while (($data = fgetcsv($handle, 1000, $delim)) !== FALSE) {
                 if (isset($data[0]) && isset($data[1])) {
                     $code = trim($data[0]);
                     $libelle = trim($data[1]);
-                    
-                    // Nouveauté 1.6.3 : Correction silencieuse des accents (INSEE utilise ISO-8859-1/Windows-1252)
                     if (!mb_check_encoding($libelle, 'UTF-8')) {
                         $libelle = mb_convert_encoding($libelle, 'UTF-8', 'Windows-1252');
                     }
+                    $libelle = mb_substr($libelle, 0, 250, 'UTF-8');
+                    $code = mb_substr($code, 0, 10, 'UTF-8');
                     
                     $stmt->execute([':code' => $code, ':libelle' => $libelle]);
                     $count++;
@@ -512,7 +509,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             echo json_encode(['success' => true, 'message' => "$count codes NAF importés avec succès !"]);
         } catch (Exception $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
-            echo json_encode(['success' => false, 'message' => "Erreur base de données : L'importation a été annulée."]);
+            echo json_encode(['success' => false, 'message' => "Erreur DB : " . $e->getMessage()]);
         }
     } else {
         echo json_encode(['success' => false, 'message' => "Impossible d'ouvrir le fichier CSV."]);
@@ -933,7 +930,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         <div class="header-top">
             <div class="header-title">
                 <h1>EcoTrace 🍃</h1>
-                <div class="app-version-main">v1.6.3</div>
+                <div class="app-version-main">v1.6.4</div>
                 <div id="update-badge" class="update-badge" onclick="verifierMiseAJour()">⚠️ Mise à jour disponible !</div>
             </div>
             <div class="header-actions">
@@ -1327,7 +1324,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
             if(bounds.length > 1) mapGlobal.fitBounds(bounds, {padding: [30, 30]});
         }
 
-        // Nouveauté 1.6.3 : Import robuste du Dictionnaire NAF
+        // Nouveauté 1.6.4 : Import robuste du Dictionnaire NAF
         async function demarrerImportNAF(event) {
             const file = event.target.files[0]; if (!file) return;
             document.getElementById('import-progress').style.display = 'block';
@@ -1340,24 +1337,21 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
             
             try {
                 let response = await fetch('', { method: 'POST', body: formData }); 
-                let text = await response.text(); // Lire en texte d'abord pour attraper les erreurs PHP inattendues
+                let text = await response.text(); 
                 try {
                     let data = JSON.parse(text);
                     if (data.success) { 
                         document.getElementById('import-status').innerText = "✅ " + data.message; 
                         setTimeout(() => location.reload(), 2000); 
                     } else { 
-                        alert(data.message); 
-                        document.getElementById('import-progress').style.display = 'none'; 
+                        document.getElementById('import-status').innerHTML = "❌ <span style='color:#e74c3c'>" + data.message + "</span>"; 
                     }
                 } catch(e) {
-                    console.error("Réponse du serveur non-JSON :", text);
-                    alert("Erreur serveur : Le fichier est peut-être trop lourd ou un problème système est survenu. Voir la console (F12).");
-                    document.getElementById('import-progress').style.display = 'none'; 
+                    console.error("Erreur serveur :", text);
+                    document.getElementById('import-status').innerHTML = "❌ <span style='color:#e74c3c'>Erreur fatale PHP. Voir la console (F12).</span>";
                 }
             } catch (err) { 
-                alert("Erreur réseau critique lors de l'envoi."); 
-                document.getElementById('import-progress').style.display = 'none'; 
+                document.getElementById('import-status').innerHTML = "❌ <span style='color:#e74c3c'>Erreur réseau de communication.</span>";
             }
             event.target.value = "";
         }
