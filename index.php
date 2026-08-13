@@ -1,6 +1,6 @@
 <?php
 /**
- * EcoTrace 🍃 - Version 1.6.4
+ * EcoTrace 🍃 - Version 1.6.5
  * 
  * Copyright (C) 2026 David NAU <dnau.1973@gmail.com>
  * 
@@ -79,7 +79,7 @@ if (!file_exists($envFile) || $is_editing_config) {
     <body>
         <div class="install-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.6.4</div>
+            <div class="app-version">Version 1.6.5</div>
             <p style="text-align:center; color:#666;"><?= $is_editing_config ? "Modification des paramètres de configuration." : "Veuillez configurer les paramètres avant l'installation." ?></p>
             <form method="POST" action="?">
                 <input type="hidden" name="setup_env_action" value="1">
@@ -158,7 +158,7 @@ if (empty($_SESSION['ecotrace_logged_in'])) {
     <body>
         <div class="login-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.6.4</div>
+            <div class="app-version">Version 1.6.5</div>
             <p>Veuillez vous identifier</p>
             <?php if (isset($login_error)) echo "<div class='error'>$login_error</div>"; ?>
             <form method="POST">
@@ -337,7 +337,8 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF)); 
     fputcsv($output, ['ID Source', 'Recherche Initiale', 'Statut', 'Date Import', 'Montant (€)', 'Poids (kg)', 'Emissions Est. (kgCO2)', 'SIREN', 'Nom Validé', 'Code NAF', 'Libellé NAF', 'Alimentaire', 'ESS', 'A Mission', 'Connu', 'Santé Juridique', 'Adresse', 'Latitude', 'Longitude', 'Distance (km)'], ';');
     
-    $stmtExport = $pdo->query("SELECT s.id, s.nom_recherche, s.statut, s.date_import, s.montant, s.poids, r.siren, r.nom_complet, r.activite_principale, r.activite_principale_libelle, r.est_alimentaire, r.est_ess, r.est_societe_mission, r.est_connu, r.statut_juridique, r.siege_adresse, r.latitude, r.longitude, r.distance FROM sources_csv s INNER JOIN api_resultats r ON s.api_result_id_selectionne = r.id WHERE s.statut IN ('valide_auto', 'valide_manuel') ORDER BY s.id DESC");
+    // Nouveauté 1.6.5 : Jointure NAF
+    $stmtExport = $pdo->query("SELECT s.id, s.nom_recherche, s.statut, s.date_import, s.montant, s.poids, r.siren, r.nom_complet, r.activite_principale, COALESCE(n.libelle, r.activite_principale_libelle) as activite_principale_libelle, r.est_alimentaire, r.est_ess, r.est_societe_mission, r.est_connu, r.statut_juridique, r.siege_adresse, r.latitude, r.longitude, r.distance FROM sources_csv s INNER JOIN api_resultats r ON s.api_result_id_selectionne = r.id LEFT JOIN codes_naf n ON UPPER(REPLACE(n.code, '.', '')) = UPPER(REPLACE(r.activite_principale, '.', '')) WHERE s.statut IN ('valide_auto', 'valide_manuel') ORDER BY s.id DESC");
     
     while ($row = $stmtExport->fetch(PDO::FETCH_ASSOC)) {
         $co2 = estimerCO2($row['activite_principale'], $row['montant'], $row['poids'], $row['distance']);
@@ -424,8 +425,8 @@ function getLibelleNafLocal($codeNaf) {
     
     if ($pdo) {
         try {
-            $stmt = $pdo->prepare("SELECT libelle FROM codes_naf WHERE code = :code LIMIT 1");
-            $stmt->execute([':code' => $cleanCode]);
+            $stmt = $pdo->prepare("SELECT libelle FROM codes_naf WHERE UPPER(REPLACE(code, '.', '')) = :code LIMIT 1");
+            $stmt->execute([':code' => str_replace('.', '', $cleanCode)]);
             $res = $stmt->fetch(PDO::FETCH_ASSOC);
             if ($res && !empty($res['libelle'])) return $res['libelle'];
         } catch (Exception $e) {}
@@ -470,18 +471,34 @@ function determinerSanteJuridique($entreprise) {
 // 5. REQUÊTES AJAX
 // =========================================================================
 
+// Nouveauté 1.6.5 : Action pour Mettre à jour l'ensemble des NAF en base de données manuellement
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_naf') {
+    header('Content-Type: application/json');
+    try {
+        $pdo->exec("
+            UPDATE api_resultats r 
+            INNER JOIN codes_naf n ON UPPER(REPLACE(n.code, '.', '')) = UPPER(REPLACE(r.activite_principale, '.', '')) 
+            SET r.activite_principale_libelle = n.libelle
+        ");
+        echo json_encode(['success' => true, 'message' => "✅ Les libellés NAF ont été mis à jour dans la base !"]);
+    } catch (Exception $e) { 
+        echo json_encode(['success' => false, 'message' => "Erreur : " . $e->getMessage()]); 
+    }
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'import_naf_csv' && isset($_FILES['naf_file'])) {
     header('Content-Type: application/json');
     $file = $_FILES['naf_file']['tmp_name'];
-    if (empty($file)) { echo json_encode(['success' => false, 'message' => "Le fichier est vide ou n'a pas pu être chargé."]); exit; }
+    if (empty($file)) { echo json_encode(['success' => false, 'message' => "Le fichier est vide ou n'a pas pu être chargé (vérifiez la taille max dans php.ini)."]); exit; }
     
     $handle = fopen($file, "r");
     if ($handle !== FALSE) {
         try {
             $pdo->exec("CREATE TABLE IF NOT EXISTS codes_naf (code VARCHAR(10) PRIMARY KEY, libelle VARCHAR(255)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+            
             $pdo->beginTransaction();
             $pdo->exec("DELETE FROM codes_naf;"); 
-            
             $stmt = $pdo->prepare("INSERT IGNORE INTO codes_naf (code, libelle) VALUES (:code, :libelle)");
             $count = 0;
             
@@ -494,11 +511,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 if (isset($data[0]) && isset($data[1])) {
                     $code = trim($data[0]);
                     $libelle = trim($data[1]);
+                    
                     if (!mb_check_encoding($libelle, 'UTF-8')) {
                         $libelle = mb_convert_encoding($libelle, 'UTF-8', 'Windows-1252');
                     }
-                    $libelle = mb_substr($libelle, 0, 250, 'UTF-8');
-                    $code = mb_substr($code, 0, 10, 'UTF-8');
                     
                     $stmt->execute([':code' => $code, ':libelle' => $libelle]);
                     $count++;
@@ -509,7 +525,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             echo json_encode(['success' => true, 'message' => "$count codes NAF importés avec succès !"]);
         } catch (Exception $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
-            echo json_encode(['success' => false, 'message' => "Erreur DB : " . $e->getMessage()]);
+            echo json_encode(['success' => false, 'message' => "Erreur base de données : L'importation a été annulée."]);
         }
     } else {
         echo json_encode(['success' => false, 'message' => "Impossible d'ouvrir le fichier CSV."]);
@@ -786,11 +802,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 // =========================================================================
 $sourcesEnAttente = $pdo->query("SELECT * FROM sources_csv WHERE statut = 'en_attente' ORDER BY id DESC LIMIT 1000")->fetchAll(PDO::FETCH_ASSOC);
 $sourcesIntrouvables = $pdo->query("SELECT * FROM sources_csv WHERE statut = 'introuvable' ORDER BY id DESC LIMIT 1000")->fetchAll(PDO::FETCH_ASSOC);
+
+// Nouveauté 1.6.5 : Jointure NAF dynamique (LEFT JOIN) pour l'affichage de l'historique
 $sourcesValides = $pdo->query("
     SELECT s.id as source_id, s.nom_recherche, s.statut, s.date_import, s.montant, s.poids,
            r.id as resultat_id, r.siren, r.nom_complet, r.siege_adresse, r.latitude, r.longitude, r.distance, 
-           r.activite_principale, r.activite_principale_libelle, r.est_alimentaire, r.est_ess, r.est_societe_mission, r.est_connu, r.statut_juridique
-    FROM sources_csv s INNER JOIN api_resultats r ON s.api_result_id_selectionne = r.id
+           r.activite_principale, COALESCE(n.libelle, r.activite_principale_libelle) as activite_principale_libelle, r.est_alimentaire, r.est_ess, r.est_societe_mission, r.est_connu, r.statut_juridique
+    FROM sources_csv s 
+    INNER JOIN api_resultats r ON s.api_result_id_selectionne = r.id
+    LEFT JOIN codes_naf n ON UPPER(REPLACE(n.code, '.', '')) = UPPER(REPLACE(r.activite_principale, '.', ''))
     WHERE s.statut IN ('valide_auto', 'valide_manuel') ORDER BY s.id DESC LIMIT 1000
 ")->fetchAll(PDO::FETCH_ASSOC);
 
@@ -930,7 +950,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         <div class="header-top">
             <div class="header-title">
                 <h1>EcoTrace 🍃</h1>
-                <div class="app-version-main">v1.6.4</div>
+                <div class="app-version-main">v1.6.5</div>
                 <div id="update-badge" class="update-badge" onclick="verifierMiseAJour()">⚠️ Mise à jour disponible !</div>
             </div>
             <div class="header-actions">
@@ -1011,7 +1031,13 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                             <div id="feedback-<?= $source['id'] ?>" class="ajax-feedback" style="display:block; margin-top:5px;"></div>
                         </div>
                         <?php
-                        $stmtCandidats = $pdo->prepare("SELECT * FROM api_resultats WHERE source_id = :id");
+                        // Nouveauté 1.6.5 : Jointure dynamique pour le libellé NAF
+                        $stmtCandidats = $pdo->prepare("
+                            SELECT r.*, COALESCE(n.libelle, r.activite_principale_libelle) as activite_principale_libelle 
+                            FROM api_resultats r 
+                            LEFT JOIN codes_naf n ON UPPER(REPLACE(n.code, '.', '')) = UPPER(REPLACE(r.activite_principale, '.', '')) 
+                            WHERE r.source_id = :id
+                        ");
                         $stmtCandidats->execute([':id' => $source['id']]);
                         $candidats = $stmtCandidats->fetchAll(PDO::FETCH_ASSOC);
                         ?>
