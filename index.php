@@ -1,6 +1,6 @@
 <?php
 /**
- * EcoTrace 🍃 - Version 1.6.6
+ * EcoTrace 🍃 - Version 1.6.61
  * 
  * Copyright (C) 2026 David NAU <dnau.1973@gmail.com>
  * 
@@ -80,7 +80,7 @@ if (!file_exists($envFile) || $is_editing_config) {
     <body>
         <div class="install-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.6.6</div>
+            <div class="app-version">Version 1.6.61</div>
             <p style="text-align:center; color:#666;"><?= $is_editing_config ? "Modification des paramètres de configuration." : "Veuillez configurer les paramètres avant l'installation." ?></p>
             <form method="POST" action="?">
                 <input type="hidden" name="setup_env_action" value="1">
@@ -159,7 +159,7 @@ if (empty($_SESSION['ecotrace_logged_in'])) {
     <body>
         <div class="login-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.6.6</div>
+            <div class="app-version">Version 1.6.61</div>
             <p>Veuillez vous identifier</p>
             <?php if (isset($login_error)) echo "<div class='error'>$login_error</div>"; ?>
             <form method="POST">
@@ -497,11 +497,9 @@ function determinerSanteJuridique($entreprise) {
 // 5. REQUÊTES AJAX
 // =========================================================================
 
-// Nouveauté 1.6.6 : Action pour mettre à jour les distances manquantes (Villes)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_distances_manquantes') {
     header('Content-Type: application/json');
     try {
-        // Limité à 25 pour ne pas surcharger Nominatim et risquer un blocage IP
         $stmt = $pdo->query("SELECT id, siege_adresse FROM api_resultats WHERE (latitude IS NULL OR longitude IS NULL OR distance IS NULL) AND siege_adresse IS NOT NULL AND siege_adresse != '' LIMIT 25");
         $entreprises = $stmt->fetchAll(PDO::FETCH_ASSOC);
         $count = 0;
@@ -689,7 +687,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $nom = trim($_POST['nom_complet'] ?? ''); $siren = trim($_POST['siren'] ?? ''); $naf = trim($_POST['naf'] ?? ''); $adresse = trim($_POST['adresse'] ?? ''); $statut_juridique = trim($_POST['statut_juridique'] ?? 'Actif');
     $latitude = !empty($_POST['latitude']) ? (float)$_POST['latitude'] : null; $longitude = !empty($_POST['longitude']) ? (float)$_POST['longitude'] : null; $distance = !empty($_POST['distance']) ? (float)$_POST['distance'] : null;
     
-    // Nouveauté 1.6.6 : Fallback Ajout manuel
     $fallback_geo = preg_match('/([0-9]{5})\s+(.*)$/', $adresse, $matches) ? trim($matches[1] . ' ' . $matches[2]) : null;
 
     if (empty($latitude) || empty($longitude)) { 
@@ -750,14 +747,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $stmtInsertResult = $pdo->prepare("INSERT INTO api_resultats (source_id, siren, nom_complet, activite_principale, activite_principale_libelle, est_alimentaire, est_ess, est_societe_mission, statut_juridique, siege_adresse, latitude, longitude, distance) VALUES (:source_id, :siren, :nom_complet, :activite_principale, :activite_principale_libelle, :est_alimentaire, :est_ess, :est_mission, :statut_juridique, :siege_adresse, :latitude, :longitude, :distance)");
             foreach ($resultats as $entreprise) {
                 $act = (string)($entreprise['activite_principale'] ?? '');
+                $lat = $entreprise['siege']['latitude'] ?? null; $lon = $entreprise['siege']['longitude'] ?? null;
                 $adresse = trim(($entreprise['siege']['adresse'] ?? ''));
                 
-                // Nouveauté 1.6.6 : Fallback ville pour Gouv.fr
                 $cp = trim($entreprise['siege']['code_postal'] ?? '');
                 $ville = trim($entreprise['siege']['libelle_commune'] ?? '');
                 $fallback_geo = ($cp && $ville) ? "$cp $ville" : null;
-                
-                $lat = $entreprise['siege']['latitude'] ?? null; $lon = $entreprise['siege']['longitude'] ?? null;
+
                 if (empty($lat) || empty($lon)) { 
                     $coords = geocoderAdresseOSM($adresse); 
                     if (!$coords && $fallback_geo) { $coords = geocoderAdresseOSM($fallback_geo); }
@@ -803,7 +799,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         if ($reponse) {
             $donneesJSON = json_decode($reponse, true); $raw_results = $donneesJSON['resultats'] ?? [];
             foreach(array_slice($raw_results, 0, 5) as $ent) {
-                // Nouveauté 1.6.6 : Fallback ville Pappers
                 $cp = trim($ent['siege']['code_postal'] ?? '');
                 $ville = trim($ent['siege']['ville'] ?? '');
                 $fallback_geo = ($cp && $ville) ? "$cp $ville" : null;
@@ -911,7 +906,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 $sourcesEnAttente = $pdo->query("SELECT * FROM sources_csv WHERE statut = 'en_attente' ORDER BY id DESC LIMIT 1000")->fetchAll(PDO::FETCH_ASSOC);
 $sourcesIntrouvables = $pdo->query("SELECT * FROM sources_csv WHERE statut = 'introuvable' ORDER BY id DESC LIMIT 1000")->fetchAll(PDO::FETCH_ASSOC);
 
-// Jointure NAF dynamique (LEFT JOIN) pour l'affichage de l'historique
 $sourcesValides = $pdo->query("
     SELECT s.id as source_id, s.nom_recherche, s.statut, s.date_import, s.montant, s.poids,
            r.id as resultat_id, r.siren, r.nom_complet, r.siege_adresse, r.latitude, r.longitude, r.distance, 
@@ -1026,10 +1020,9 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         .close-modal { color: #aaa; font-size: 28px; font-weight: bold; cursor: pointer; line-height: 1; }
         .close-modal:hover { color: #333; }
         
-        /* Highlight SIREN matching persisté */
         tr.highlight-siren > td { background-color: #d1f2eb !important; border-top: 2px solid #1abc9c; border-bottom: 2px solid #1abc9c; }
         
-        /* Formulaires alignés (Enrichissement & Ajout Manuel) */
+        /* Formulaires alignés */
         #form-enrich .form-group, #form-ajout-manuel .form-group { display: flex; align-items: center; margin-bottom: 15px; }
         #form-enrich .form-group label, #form-ajout-manuel .form-group label { width: 190px; margin-bottom: 0; flex-shrink: 0; text-align: left; line-height: 1.2; padding-right: 10px; }
         #form-enrich .form-group input, #form-ajout-manuel .form-group input, #form-ajout-manuel .form-group select { flex: 1; width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-family: 'Nunito', sans-serif; }
@@ -1058,7 +1051,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         <div class="header-top">
             <div class="header-title">
                 <h1>EcoTrace 🍃</h1>
-                <div class="app-version-main">v1.6.6</div>
+                <div class="app-version-main">v1.6.61</div>
                 <div id="update-badge" class="update-badge" onclick="verifierMiseAJour()">⚠️ Mise à jour disponible !</div>
             </div>
             <div class="header-actions">
@@ -1070,26 +1063,21 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                 <div class="dropdown">
                     <button class="dropbtn">⚙️ Actions ▾</button>
                     <div class="dropdown-content">
-                        <!-- Liens d'information en Iframe -->
                         <button onclick="ouvrirIframeModal('doc.html')">📖 Documentation</button>
                         <button onclick="ouvrirIframeModal('licence.html')">📜 Licence</button>
                         <button onclick="ouvrirIframeModal('presentation.html')">📽️ Présentation</button>
                         <button onclick="ouvrirIframeModal('historique.html')">🕒 Historique</button>
                         
-                        <!-- Base de données -->
                         <button onclick="document.getElementById('sql-upload').click()" style="border-top: 1px solid #ddd;">📂 Importer Dump (SQL)</button>
                         <a href="?export=sql">💾 Exporter Dump (SQL)</a>
                         <button onclick="document.getElementById('naf-upload').click()" title="Format attendu : code, libelle">📚 Importer Dictionnaire NAF (CSV)</button>
                         
-                        <!-- Export / Import CSV -->
                         <button onclick="document.getElementById('csv-upload').click()" style="border-top: 1px solid #ddd;" title="Format : Nom, Montant(€), Poids(kg)">📁 Importer CSV enrichi</button>
                         <a href="?export=csv">📥 Exporter CSV final</a>
                         <button onclick="document.getElementById('siren-highlight-upload').click()" style="color: #1abc9c; font-weight: bold;" title="Mettre en évidence et sauvegarder les fournisseurs connus">✨ Surligner via SIREN (CSV)</button>
 
-                        <!-- Maintenance et Mises à jour -->
                         <button onclick="verifierMiseAJour()" style="border-top: 1px solid #ddd; color: #27ae60; font-weight: bold;">🔄 Vérifier mise à jour</button>
                         
-                        <!-- Nouveauté 1.6.6 : Bouton de mise à jour des distances par la ville -->
                         <button onclick="lancerMajAjax('update_distances_manquantes', this)" style="border-top: 1px solid #ddd;" title="Calcule les distances pour les entreprises sans coordonnées, via leur Code Postal / Ville (Max 25 par clic).">🌐 Maj Distances (Villes)</button>
                         <button onclick="lancerMajAjax('update_gps', this)">📍 Maj GPS</button>
                         <button onclick="lancerMajAjax('update_naf', this)">📚 Maj NAF</button>
@@ -1141,7 +1129,6 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                             <div id="feedback-<?= $source['id'] ?>" class="ajax-feedback" style="display:block; margin-top:5px;"></div>
                         </div>
                         <?php
-                        // Jointure dynamique pour le libellé NAF
                         $stmtCandidats = $pdo->prepare("
                             SELECT r.*, COALESCE(n.libelle, r.activite_principale_libelle) as activite_principale_libelle 
                             FROM api_resultats r 
@@ -1249,7 +1236,14 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                                         <div style="margin-bottom: 6px;"><span class="text-muted-inline" style="color: #e67e22;">🔍 Recherche CSV : <strong><?= htmlspecialchars($valide['nom_recherche'] ?? '') ?></strong></span></div>
                                         <?php $sJ = $valide['statut_juridique'] ?? 'Actif'; $sClass = ($sJ === 'Fermée' || strpos($sJ, 'Liquidation') !== false) ? 'sante-ferme' : (($sJ !== 'Actif') ? 'sante-difficulte' : 'sante-actif'); ?>
                                         <strong><?= htmlspecialchars($valide['nom_complet'] ?? '') ?></strong>
-                                        <span class="sante-badge <?= $sClass ?>" style="margin-left: 8px;" onclick="voirAnnonceSante('<?= $valide['siren'] ?>', '<?= htmlspecialchars(addslashes($valide['nom_complet'] ?? '')) ?>')" title="Cliquer pour voir les détails juridiques officiels"><?= htmlspecialchars($sJ) ?> 🔍</span><br>
+                                        <span class="sante-badge <?= $sClass ?>" style="margin-left: 8px;" onclick="voirAnnonceSante('<?= $valide['siren'] ?>', '<?= htmlspecialchars(addslashes($valide['nom_complet'] ?? '')) ?>')" title="Cliquer pour voir les détails juridiques officiels"><?= htmlspecialchars($sJ) ?> 🔍</span>
+                                        
+                                        <!-- Nouveauté 1.6.61 : Indicateur visuel d'anomalie de distance -->
+                                        <?php if (empty($valide['distance']) || $valide['distance'] <= 0): ?>
+                                            <span class="badge badge-red" style="margin-left: 8px; background-color: #c0392b;" title="Aucune distance calculée : utilisez le bouton Maj Distances (Villes)">⚠️ Anomalie GPS</span>
+                                        <?php endif; ?>
+                                        <br>
+                                        
                                         <span class="text-muted" style="margin-top: 5px;">SIREN : <?= htmlspecialchars($valide['siren'] ?? '') ?><br>📍 <?= htmlspecialchars($valide['siege_adresse'] ?? '') ?></span>
                                         <div style="margin-top: 6px;"><strong><?= htmlspecialchars($valide['activite_principale'] ?? '') ?></strong> <span class="text-muted-inline">- <?= htmlspecialchars($valide['activite_principale_libelle'] ?? '') ?></span></div>
                                     </td>
@@ -1264,15 +1258,22 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                                         <?php if ($valide['est_societe_mission']): ?><div class="label-badge label-mission">🎯 Mission</div><?php endif; ?>
                                     </td>
                                     <td style="text-align: center;">
-                                        <strong style="color:#d35400; font-size:16px;"><?= estimerCO2($valide['activite_principale'], $valide['montant'], $valide['poids'], $valide['distance']) ?> kg</strong>
-                                        <span class="text-muted">Dist : <?= htmlspecialchars($valide['distance'] ?? '') ?> km</span>
+                                        <strong style="color:#d35400; font-size:16px;"><?= estimerCO2($valide['activite_principale'], $valide['montant'], $valide['poids'], $valide['distance']) ?> kg</strong><br>
+                                        
+                                        <!-- Affichage de la distance rouge si manquante -->
+                                        <?php if(empty($valide['distance']) || $valide['distance'] <= 0): ?>
+                                            <span class="text-muted" style="color: #e74c3c; font-weight: bold;">⚠️ Dist. inconnue</span><br>
+                                        <?php else: ?>
+                                            <span class="text-muted">Dist : <?= htmlspecialchars($valide['distance']) ?> km</span><br>
+                                        <?php endif; ?>
+
                                         <?php if($valide['montant']>0) echo "<span class='text-muted' style='font-size:10px;'>Achat: {$valide['montant']} €</span>"; ?>
                                         <?php if($valide['poids']>0) echo "<span class='text-muted' style='font-size:10px;'>Poids: {$valide['poids']} kg</span>"; ?>
                                     </td>
                                     <td style="text-align: center;">
                                         <?php if (!empty($valide['latitude']) && !empty($valide['longitude'])): ?>
                                             <div class="map-thumbnail" onclick="ouvrirCarte(<?= $valide['latitude'] ?>, <?= $valide['longitude'] ?>, '<?= htmlspecialchars(addslashes($valide['nom_complet'] ?? '')) ?>')" title="Voir l'itinéraire">🗺️</div>
-                                        <?php else: ?><span class="text-muted" style="font-size: 0.8em;">N/A</span><?php endif; ?>
+                                        <?php else: ?><span class="text-muted" style="font-size: 0.8em; color: #e74c3c; font-weight: bold;">⚠️ Erreur GPS</span><?php endif; ?>
                                     </td>
                                     <td style="text-align: center;">
                                         <span class="<?= $valide['statut'] === 'valide_auto' ? 'status-auto' : 'status-manual' ?>" style="display:block; margin-bottom:8px;"><?= $valide['statut'] === 'valide_auto' ? 'Automatique' : 'Manuel' ?></span>
@@ -1460,7 +1461,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
             if(bounds.length > 1) mapGlobal.fitBounds(bounds, {padding: [30, 30]});
         }
 
-        // Nouveauté 1.6.4 : Import robuste du Dictionnaire NAF
+        // Import robuste du Dictionnaire NAF
         async function demarrerImportNAF(event) {
             const file = event.target.files[0]; if (!file) return;
             document.getElementById('import-progress').style.display = 'block';
