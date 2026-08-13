@@ -1,6 +1,6 @@
 <?php
 /**
- * EcoTrace 🍃 - Version 1.6.7
+ * EcoTrace 🍃 - Version 1.6.8
  * 
  * Copyright (C) 2026 David NAU <dnau.1973@gmail.com>
  * 
@@ -79,7 +79,7 @@ if (!file_exists($envFile) || $is_editing_config) {
     <body>
         <div class="install-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.6.7</div>
+            <div class="app-version">Version 1.6.8</div>
             <p style="text-align:center; color:#666;"><?= $is_editing_config ? "Modification des paramètres de configuration." : "Veuillez configurer les paramètres avant l'installation." ?></p>
             <form method="POST" action="?">
                 <input type="hidden" name="setup_env_action" value="1">
@@ -158,7 +158,7 @@ if (empty($_SESSION['ecotrace_logged_in'])) {
     <body>
         <div class="login-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.6.7</div>
+            <div class="app-version">Version 1.6.8</div>
             <p>Veuillez vous identifier</p>
             <?php if (isset($login_error)) echo "<div class='error'>$login_error</div>"; ?>
             <form method="POST">
@@ -251,6 +251,7 @@ try {
             try { $pdo->exec("ALTER TABLE api_resultats ADD COLUMN est_ess TINYINT(1) DEFAULT 0 AFTER est_alimentaire"); } catch (PDOException $e) {}
             try { $pdo->exec("ALTER TABLE api_resultats ADD COLUMN est_societe_mission TINYINT(1) DEFAULT 0 AFTER est_ess"); } catch (PDOException $e) {}
             try { $pdo->exec("ALTER TABLE api_resultats ADD COLUMN est_connu TINYINT(1) DEFAULT 0 AFTER est_societe_mission"); } catch (PDOException $e) {}
+            try { $pdo->exec("ALTER TABLE api_resultats ADD COLUMN origine_geo VARCHAR(50) NULL AFTER distance"); } catch (PDOException $e) {}
             try { $pdo->exec("CREATE TABLE IF NOT EXISTS codes_naf (code VARCHAR(10) PRIMARY KEY, libelle VARCHAR(255)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"); } catch (PDOException $e) {}
         }
     }
@@ -294,6 +295,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_action'])) {
             latitude DECIMAL(10,8) NULL,
             longitude DECIMAL(10,8) NULL,
             distance FLOAT NULL,
+            origine_geo VARCHAR(50) NULL,
             date_requete DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (source_id) REFERENCES sources_csv(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -307,6 +309,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_action'])) {
         ";
         $pdoServer->exec($sql);
 
+        // Import automatique NAF à l'installation
         $nafFile = __DIR__ . '/insee.codenaf.csv';
         if (file_exists($nafFile)) {
             $handle = fopen($nafFile, "r");
@@ -360,9 +363,9 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     header('Content-Disposition: attachment; filename=ecotrace_export_' . date('Ymd_His') . '.csv');
     $output = fopen('php://output', 'w');
     fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF)); 
-    fputcsv($output, ['ID Source', 'Recherche Initiale', 'Statut', 'Date Import', 'Montant (€)', 'Poids (kg)', 'Emissions Est. (kgCO2)', 'SIREN', 'Nom Validé', 'Code NAF', 'Libellé NAF', 'Alimentaire', 'ESS', 'A Mission', 'Connu', 'Santé Juridique', 'Adresse', 'Latitude', 'Longitude', 'Distance (km)'], ';');
+    fputcsv($output, ['ID Source', 'Recherche Initiale', 'Statut', 'Date Import', 'Montant (€)', 'Poids (kg)', 'Emissions Est. (kgCO2)', 'SIREN', 'Nom Validé', 'Code NAF', 'Libellé NAF', 'Alimentaire', 'ESS', 'A Mission', 'Connu', 'Santé Juridique', 'Adresse', 'Latitude', 'Longitude', 'Distance (km)', 'Origine Géo'], ';');
     
-    $stmtExport = $pdo->query("SELECT s.id, s.nom_recherche, s.statut, s.date_import, s.montant, s.poids, r.siren, r.nom_complet, r.activite_principale, COALESCE(n.libelle, r.activite_principale_libelle) as activite_principale_libelle, r.est_alimentaire, r.est_ess, r.est_societe_mission, r.est_connu, r.statut_juridique, r.siege_adresse, r.latitude, r.longitude, r.distance FROM sources_csv s INNER JOIN api_resultats r ON s.api_result_id_selectionne = r.id LEFT JOIN codes_naf n ON UPPER(REPLACE(n.code, '.', '')) = UPPER(REPLACE(r.activite_principale, '.', '')) WHERE s.statut IN ('valide_auto', 'valide_manuel') ORDER BY s.id DESC");
+    $stmtExport = $pdo->query("SELECT s.id, s.nom_recherche, s.statut, s.date_import, s.montant, s.poids, r.siren, r.nom_complet, r.activite_principale, COALESCE(n.libelle, r.activite_principale_libelle) as activite_principale_libelle, r.est_alimentaire, r.est_ess, r.est_societe_mission, r.est_connu, r.statut_juridique, r.siege_adresse, r.latitude, r.longitude, r.distance, r.origine_geo FROM sources_csv s INNER JOIN api_resultats r ON s.api_result_id_selectionne = r.id LEFT JOIN codes_naf n ON UPPER(REPLACE(n.code, '.', '')) = UPPER(REPLACE(r.activite_principale, '.', '')) WHERE s.statut IN ('valide_auto', 'valide_manuel') ORDER BY s.id DESC");
     
     while ($row = $stmtExport->fetch(PDO::FETCH_ASSOC)) {
         $co2 = estimerCO2($row['activite_principale'], $row['montant'], $row['poids'], $row['distance']);
@@ -370,7 +373,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             $row['id'], $row['nom_recherche'], $row['statut'], $row['date_import'], $row['montant'], $row['poids'], $co2,
             $row['siren'], $row['nom_complet'], $row['activite_principale'], $row['activite_principale_libelle'],
             $row['est_alimentaire']?'OUI':'NON', $row['est_ess']?'OUI':'NON', $row['est_societe_mission']?'OUI':'NON', $row['est_connu']?'OUI':'NON',
-            $row['statut_juridique'], $row['siege_adresse'], $row['latitude'], $row['longitude'], $row['distance']
+            $row['statut_juridique'], $row['siege_adresse'], $row['latitude'], $row['longitude'], $row['distance'], $row['origine_geo']
         ], ';');
     }
     fclose($output); exit;
@@ -424,16 +427,15 @@ function geocoderAdresseOSM($adresse) {
     return null;
 }
 
-// Nouveauté 1.6.7 : Géocodage intelligent (Simplification de l'adresse en cas d'échec)
 function geocodeSmarter($adresse) {
     if (empty(trim($adresse))) return null;
     
     // Tentative 1 : Adresse brute complète
     $coords = geocoderAdresseOSM($adresse);
     if ($coords) return $coords;
-    usleep(300000); // Pause pour éviter d'être bloqué par OSM
+    usleep(300000); 
 
-    // Tentative 2 : Extraire uniquement le Code Postal et la Ville (fin de chaîne)
+    // Tentative 2 : Extraire uniquement le Code Postal et la Ville
     if (preg_match('/([0-9]{4,5})\s+(.*)$/', $adresse, $matches)) {
         $coords = geocoderAdresseOSM(trim($matches[1] . ' ' . $matches[2]));
         if ($coords) return $coords;
@@ -448,7 +450,7 @@ function geocodeSmarter($adresse) {
         usleep(300000);
     }
 
-    // Tentative 4 : Ne garder que les 3 derniers mots (ex: DUBLIN 2 IRLANDE)
+    // Tentative 4 : Ne garder que les 3 derniers mots
     $words = preg_split('/\s+/', trim($adresse));
     if (count($words) > 3) {
         $coords = geocoderAdresseOSM(implode(' ', array_slice($words, -3)));
@@ -456,7 +458,7 @@ function geocodeSmarter($adresse) {
         usleep(300000);
     }
 
-    // Tentative 5 : Ultime recours, le tout dernier mot (Pays)
+    // Tentative 5 : Ultime recours, le dernier mot
     if (count($words) > 0) {
         $lastWord = end($words);
         if (strlen($lastWord) > 3) {
@@ -483,6 +485,33 @@ function calculerDistance($lat1, $lon1, $lat2, $lon2) {
         if (isset($donnees['routes'][0]['distance'])) return round($donnees['routes'][0]['distance'] / 1000, 2);
     }
     return calculerDistanceVolDOiseau($lat1, $lon1, $lat2, $lon2);
+}
+
+// Nouveauté 1.6.8 : Détermination de l'origine géographique
+function determinerOrigineGeo($distance, $adresse) {
+    if ($distance === null || $distance === '') return 'Inconnue';
+    if ($distance <= 100) return 'Alliance Locale';
+    if ($distance <= 150) return 'Régionale';
+    
+    $adresseUpper = strtoupper(trim($adresse));
+    $paysEtrangers = ['BELGIQUE', 'ESPAGNE', 'ALLEMAGNE', 'SUISSE', 'ITALIE', 'ROYAUME-UNI', 'IRLANDE', 'PAYS-BAS', 'PORTUGAL', 'LUXEMBOURG', 'ETATS-UNIS', 'USA', 'POLSKA', 'POLOGNE', 'CHINE', 'JAPON'];
+    $isEtranger = false;
+    
+    foreach ($paysEtrangers as $pays) {
+        if (strpos($adresseUpper, $pays) !== false) {
+            $isEtranger = true; break;
+        }
+    }
+    
+    if (!$isEtranger && !preg_match('/\b[0-9]{5}\b/', $adresseUpper)) {
+        $isEtranger = true;
+    }
+    
+    if (preg_match('/FRANCE$/', $adresseUpper)) {
+        $isEtranger = false;
+    }
+
+    return $isEtranger ? 'Internationale' : 'Nationale';
 }
 
 function getLibelleNafLocal($codeNaf) {
@@ -539,7 +568,24 @@ function determinerSanteJuridique($entreprise) {
 // 5. REQUÊTES AJAX
 // =========================================================================
 
-// Nouveauté 1.6.7 : Maj Distance unitaire interactive
+// Nouveauté 1.6.8 : Mise à jour de toutes les origines géo
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_origines') {
+    header('Content-Type: application/json');
+    try {
+        $stmt = $pdo->query("SELECT id, distance, siege_adresse FROM api_resultats");
+        $entreprises = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $stmtUpdate = $pdo->prepare("UPDATE api_resultats SET origine_geo = :o WHERE id = :id");
+        $count = 0;
+        foreach ($entreprises as $ent) {
+            $o = determinerOrigineGeo($ent['distance'], $ent['siege_adresse']);
+            $stmtUpdate->execute([':o' => $o, ':id' => $ent['id']]);
+            $count++;
+        }
+        echo json_encode(['success' => true, 'message' => "✅ $count origines géographiques calculées et mises à jour !"]);
+    } catch (Exception $e) { echo json_encode(['success' => false, 'message' => "Erreur : " . $e->getMessage()]); }
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_distance_unique') {
     header('Content-Type: application/json');
     $id = (int)($_POST['id'] ?? 0);
@@ -552,11 +598,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $coords = geocodeSmarter($ent['siege_adresse']);
         if ($coords) {
             $dist = calculerDistance($origineLat, $origineLon, $coords['lat'], $coords['lon']);
-            $pdo->prepare("UPDATE api_resultats SET latitude = :lat, longitude = :lon, distance = :dist WHERE id = :id")
-                ->execute([':lat' => $coords['lat'], ':lon' => $coords['lon'], ':dist' => $dist, ':id' => $id]);
+            $ogeo = determinerOrigineGeo($dist, $ent['siege_adresse']);
+            
+            $pdo->prepare("UPDATE api_resultats SET latitude = :lat, longitude = :lon, distance = :dist, origine_geo = :ogeo WHERE id = :id")
+                ->execute([':lat' => $coords['lat'], ':lon' => $coords['lon'], ':dist' => $dist, ':ogeo' => $ogeo, ':id' => $id]);
             echo json_encode(['success' => true, 'message' => "Coordonnées mises à jour avec succès."]);
         } else {
-            echo json_encode(['success' => false, 'message' => "Impossible de géolocaliser cette adresse, même en mode secours."]);
+            echo json_encode(['success' => false, 'message' => "Impossible de géolocaliser cette adresse."]);
         }
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'message' => $e->getMessage()]);
@@ -571,7 +619,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $entreprises = $stmt->fetchAll(PDO::FETCH_ASSOC);
         $count = 0;
         
-        $stmtUpdate = $pdo->prepare("UPDATE api_resultats SET latitude = :lat, longitude = :lon, distance = :dist WHERE id = :id");
+        $stmtUpdate = $pdo->prepare("UPDATE api_resultats SET latitude = :lat, longitude = :lon, distance = :dist, origine_geo = :ogeo WHERE id = :id");
         
         foreach ($entreprises as $ent) {
             $adresse = trim($ent['siege_adresse'] ?? '');
@@ -580,7 +628,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $coords = geocodeSmarter($adresse);
             if ($coords) {
                 $dist = calculerDistance($origineLat, $origineLon, $coords['lat'], $coords['lon']);
-                $stmtUpdate->execute([':lat' => $coords['lat'], ':lon' => $coords['lon'], ':dist' => $dist, ':id' => $ent['id']]);
+                $ogeo = determinerOrigineGeo($dist, $adresse);
+                
+                $stmtUpdate->execute([':lat' => $coords['lat'], ':lon' => $coords['lon'], ':dist' => $dist, ':ogeo' => $ogeo, ':id' => $ent['id']]);
                 $count++;
             }
         }
@@ -750,12 +800,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     if (empty($nom)) { echo json_encode(['success' => false, 'message' => 'Le nom est obligatoire.']); exit; }
 
     $alim = ($_POST['est_alimentaire'] ?? 'auto' === 'auto') ? estAlimentaire($naf) : (int)$_POST['est_alimentaire'];
+    $ogeo = determinerOrigineGeo($distance, $adresse);
 
     try {
         $pdo->beginTransaction();
         $stmt1 = $pdo->prepare("INSERT INTO sources_csv (nom_recherche, statut) VALUES (:nom, 'valide_manuel')"); $stmt1->execute([':nom' => $nom]); $sourceId = $pdo->lastInsertId();
-        $stmt2 = $pdo->prepare("INSERT INTO api_resultats (source_id, siren, nom_complet, activite_principale, activite_principale_libelle, est_alimentaire, statut_juridique, siege_adresse, latitude, longitude, distance) VALUES (:source_id, :siren, :nom, :naf, :naf_lib, :alim, :statut_j, :adresse, :lat, :lon, :dist)");
-        $stmt2->execute([':source_id' => $sourceId, ':siren' => $siren, ':nom' => $nom, ':naf' => $naf, ':naf_lib' => getLibelleNafLocal($naf), ':alim' => $alim, ':statut_j' => $statut_juridique, ':adresse' => $adresse, ':lat' => $latitude, ':lon' => $longitude, ':dist' => $distance]);
+        
+        $stmt2 = $pdo->prepare("INSERT INTO api_resultats (source_id, siren, nom_complet, activite_principale, activite_principale_libelle, est_alimentaire, statut_juridique, siege_adresse, latitude, longitude, distance, origine_geo) VALUES (:source_id, :siren, :nom, :naf, :naf_lib, :alim, :statut_j, :adresse, :lat, :lon, :dist, :ogeo)");
+        $stmt2->execute([':source_id' => $sourceId, ':siren' => $siren, ':nom' => $nom, ':naf' => $naf, ':naf_lib' => getLibelleNafLocal($naf), ':alim' => $alim, ':statut_j' => $statut_juridique, ':adresse' => $adresse, ':lat' => $latitude, ':lon' => $longitude, ':dist' => $distance, ':ogeo' => $ogeo]);
+        
         $pdo->prepare("UPDATE sources_csv SET api_result_id_selectionne = :res_id WHERE id = :id")->execute([':res_id' => $pdo->lastInsertId(), ':id' => $sourceId]);
         $pdo->commit(); echo json_encode(['success' => true, 'message' => "Entité '$nom' ajoutée manuellement avec succès !"]);
     } catch (Exception $e) { $pdo->rollBack(); echo json_encode(['success' => false, 'message' => "Erreur : " . $e->getMessage()]); }
@@ -796,7 +849,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     if ($reponse) {
         $donneesJSON = json_decode($reponse, true); $resultats = $donneesJSON['results'] ?? [];
         if (count($resultats) > 0) {
-            $stmtInsertResult = $pdo->prepare("INSERT INTO api_resultats (source_id, siren, nom_complet, activite_principale, activite_principale_libelle, est_alimentaire, est_ess, est_societe_mission, statut_juridique, siege_adresse, latitude, longitude, distance) VALUES (:source_id, :siren, :nom_complet, :activite_principale, :activite_principale_libelle, :est_alimentaire, :est_ess, :est_mission, :statut_juridique, :siege_adresse, :latitude, :longitude, :distance)");
+            $stmtInsertResult = $pdo->prepare("INSERT INTO api_resultats (source_id, siren, nom_complet, activite_principale, activite_principale_libelle, est_alimentaire, est_ess, est_societe_mission, statut_juridique, siege_adresse, latitude, longitude, distance, origine_geo) VALUES (:source_id, :siren, :nom_complet, :activite_principale, :activite_principale_libelle, :est_alimentaire, :est_ess, :est_mission, :statut_juridique, :siege_adresse, :latitude, :longitude, :distance, :ogeo)");
+            
             foreach ($resultats as $entreprise) {
                 $act = (string)($entreprise['activite_principale'] ?? '');
                 $adresse = trim(($entreprise['siege']['adresse'] ?? ''));
@@ -809,6 +863,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 }
 
                 $dist = ($lat && $lon) ? calculerDistance($origineLat, $origineLon, $lat, $lon) : null;
+                $ogeo = determinerOrigineGeo($dist, $adresse);
                 $sante = determinerSanteJuridique($entreprise);
                 
                 $est_ess = ($entreprise['complements']['est_ess'] ?? false) ? 1 : 0;
@@ -818,7 +873,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     ':source_id' => $sourceId, ':siren' => $entreprise['siren'] ?? null, ':nom_complet' => $entreprise['nom_complet'] ?? null,
                     ':activite_principale' => $act ?: null, ':activite_principale_libelle' => getLibelleNafLocal($act),
                     ':est_alimentaire' => estAlimentaire($act), ':est_ess' => $est_ess, ':est_mission' => $est_mission,
-                    ':statut_juridique' => $sante, ':siege_adresse' => $adresse, ':latitude' => $lat, ':longitude' => $lon, ':distance' => $dist
+                    ':statut_juridique' => $sante, ':siege_adresse' => $adresse, ':latitude' => $lat, ':longitude' => $lon, ':distance' => $dist, ':ogeo' => $ogeo
                 ]);
                 $dernierResultatId = $pdo->lastInsertId();
             }
@@ -905,7 +960,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
         
     $pdo->prepare("DELETE FROM api_resultats WHERE source_id = :id")->execute([':id' => $sourceId]);
-    $stmtInsertResult = $pdo->prepare("INSERT INTO api_resultats (source_id, siren, nom_complet, activite_principale, activite_principale_libelle, est_alimentaire, est_ess, est_societe_mission, statut_juridique, siege_adresse, latitude, longitude, distance) VALUES (:source_id, :siren, :nom_complet, :activite_principale, :activite_principale_libelle, :est_alimentaire, :est_ess, :est_mission, :statut_juridique, :siege_adresse, :latitude, :longitude, :distance)");
+    $stmtInsertResult = $pdo->prepare("INSERT INTO api_resultats (source_id, siren, nom_complet, activite_principale, activite_principale_libelle, est_alimentaire, est_ess, est_societe_mission, statut_juridique, siege_adresse, latitude, longitude, distance, origine_geo) VALUES (:source_id, :siren, :nom_complet, :activite_principale, :activite_principale_libelle, :est_alimentaire, :est_ess, :est_mission, :statut_juridique, :siege_adresse, :latitude, :longitude, :distance, :ogeo)");
     $dernierResultatId = null;
     
     foreach ($entreprises_trouvees as $entreprise) {
@@ -919,13 +974,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             if ($coords) { $lat = $coords['lat']; $lon = $coords['lon']; } 
         }
         $dist = ($lat && $lon) ? calculerDistance($origineLat, $origineLon, $lat, $lon) : null;
+        $ogeo = determinerOrigineGeo($dist, $adresse);
         $sante = determinerSanteJuridique(['siren' => $entreprise['siren'], 'etat_administratif' => $entreprise['etat_administratif']]);
 
         $stmtInsertResult->execute([
             ':source_id' => $sourceId, ':siren' => $entreprise['siren'], ':nom_complet' => $entreprise['nom_complet'],
             ':activite_principale' => $act ?: null, ':activite_principale_libelle' => getLibelleNafLocal($act), ':est_alimentaire' => estAlimentaire($act), 
             ':est_ess' => $entreprise['est_ess'], ':est_mission' => $entreprise['est_mission'], ':statut_juridique' => $sante, 
-            ':siege_adresse' => $adresse, ':latitude' => $lat, ':longitude' => $lon, ':distance' => $dist
+            ':siege_adresse' => $adresse, ':latitude' => $lat, ':longitude' => $lon, ':distance' => $dist, ':ogeo' => $ogeo
         ]);
         $dernierResultatId = $pdo->lastInsertId();
     }
@@ -948,7 +1004,7 @@ $sourcesIntrouvables = $pdo->query("SELECT * FROM sources_csv WHERE statut = 'in
 
 $sourcesValides = $pdo->query("
     SELECT s.id as source_id, s.nom_recherche, s.statut, s.date_import, s.montant, s.poids,
-           r.id as resultat_id, r.siren, r.nom_complet, r.siege_adresse, r.latitude, r.longitude, r.distance, 
+           r.id as resultat_id, r.siren, r.nom_complet, r.siege_adresse, r.latitude, r.longitude, r.distance, r.origine_geo,
            r.activite_principale, COALESCE(n.libelle, r.activite_principale_libelle) as activite_principale_libelle, r.est_alimentaire, r.est_ess, r.est_societe_mission, r.est_connu, r.statut_juridique
     FROM sources_csv s 
     INNER JOIN api_resultats r ON s.api_result_id_selectionne = r.id
@@ -1099,7 +1155,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         <div class="header-top">
             <div class="header-title">
                 <h1>EcoTrace 🍃</h1>
-                <div class="app-version-main">v1.6.7</div>
+                <div class="app-version-main">v1.6.8</div>
                 <div id="update-badge" class="update-badge" onclick="verifierMiseAJour()">⚠️ Mise à jour disponible !</div>
             </div>
             <div class="header-actions">
@@ -1111,7 +1167,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                 <div class="dropdown">
                     <button class="dropbtn">⚙️ Actions ▾</button>
                     <div class="dropdown-content">
-                        <!-- Liens d'information en Iframe -->
+                        <!-- Liens d'information -->
                         <button onclick="ouvrirIframeModal('doc.html')">📖 Documentation</button>
                         <button onclick="ouvrirIframeModal('licence.html')">📜 Licence</button>
                         <button onclick="ouvrirIframeModal('presentation.html')">📽️ Présentation</button>
@@ -1146,6 +1202,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                                 <button onclick="lancerMajAjax('update_naf', this)">📚 Maj NAF</button>
                                 <button onclick="lancerMajAjax('update_alimentaire', this)">🔄 Maj Alim.</button>
                                 <button onclick="lancerMajAjax('update_sante', this)">🏥 Maj Santé</button>
+                                <button onclick="lancerMajAjax('update_origines', this)" title="Mettre à jour l'origine géographique en fonction des distances enregistrées">🌍 Maj Origines Géo</button>
                             </div>
                         </div>
 
@@ -1237,8 +1294,21 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                                             <?php if ($candidat['est_societe_mission']): ?><div class="label-badge label-mission">🎯 Mission</div><?php endif; ?>
                                         </td>
                                         <td style="text-align: center;">
-                                            <strong style="color:#d35400;"><?= estimerCO2($candidat['activite_principale'], $source['montant'], $source['poids'], $candidat['distance']) ?> kg</strong>
+                                            <strong style="color:#d35400;"><?= estimerCO2($candidat['activite_principale'], $source['montant'], $source['poids'], $candidat['distance']) ?> kg</strong><br>
                                             <span class="text-muted"><?= htmlspecialchars($candidat['distance'] ?? '') ?> km</span>
+                                            
+                                            <?php 
+                                            $orig = $candidat['origine_geo'] ?? 'Inconnue';
+                                            if ($orig === 'Inconnue' && $candidat['distance'] !== null) $orig = determinerOrigineGeo($candidat['distance'], $candidat['siege_adresse']);
+                                            $origColor = '#95a5a6';
+                                            if ($orig === 'Alliance Locale') $origColor = '#27ae60';
+                                            elseif ($orig === 'Régionale') $origColor = '#f39c12';
+                                            elseif ($orig === 'Nationale') $origColor = '#2980b9';
+                                            elseif ($orig === 'Internationale') $origColor = '#8e44ad';
+                                            ?>
+                                            <?php if ($orig !== 'Inconnue'): ?>
+                                                <span class="badge" style="background-color: <?= $origColor ?>; display: block; width: fit-content; margin: 4px auto 0 auto;"><i style="font-style:normal;">📍</i> <?= $orig ?></span>
+                                            <?php endif; ?>
                                         </td>
                                         <td style="text-align: center;">
                                             <form method="POST" style="margin:0;"><input type="hidden" name="action" value="valider"><input type="hidden" name="source_id" value="<?= $source['id'] ?>"><input type="hidden" name="resultat_id" value="<?= $candidat['id'] ?>"><button type="submit" class="btn">Choisir</button></form>
@@ -1331,6 +1401,19 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                                             <span class="text-muted" style="color: #e74c3c; font-weight: bold;">⚠️ Dist. inconnue</span><br>
                                         <?php else: ?>
                                             <span class="text-muted">Dist : <?= htmlspecialchars($valide['distance']) ?> km</span><br>
+                                        <?php endif; ?>
+                                        
+                                        <?php 
+                                        $orig = $valide['origine_geo'] ?? 'Inconnue';
+                                        if ($orig === 'Inconnue' && $valide['distance'] !== null) $orig = determinerOrigineGeo($valide['distance'], $valide['siege_adresse']);
+                                        $origColor = '#95a5a6';
+                                        if ($orig === 'Alliance Locale') $origColor = '#27ae60';
+                                        elseif ($orig === 'Régionale') $origColor = '#f39c12';
+                                        elseif ($orig === 'Nationale') $origColor = '#2980b9';
+                                        elseif ($orig === 'Internationale') $origColor = '#8e44ad';
+                                        ?>
+                                        <?php if ($orig !== 'Inconnue'): ?>
+                                            <span class="badge" style="background-color: <?= $origColor ?>; display: block; width: fit-content; margin: 4px auto 0 auto;"><i style="font-style:normal;">📍</i> <?= $orig ?></span>
                                         <?php endif; ?>
 
                                         <?php if($valide['montant']>0) echo "<span class='text-muted' style='font-size:10px;'>Achat: {$valide['montant']} €</span>"; ?>
@@ -1479,7 +1562,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
             sessionStorage.setItem('scrollPositionEcotrace', window.scrollY);
         });
 
-        // Nouveauté 1.6.7 : Maj de la distance pour une seule entité (Badge Anomalie GPS)
+        // Maj de la distance pour une seule entité (Badge Anomalie GPS)
         async function lancerMajAjaxDistUnique(id, btn) {
             let originalText = btn.innerHTML;
             btn.innerHTML = "⏳...";

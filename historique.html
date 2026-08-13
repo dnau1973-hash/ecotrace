@@ -32,13 +32,21 @@
     <p style="color: #666;">Retrouvez ici la liste des modifications, corrections et nouveautés apportées à EcoTrace 🍃.</p>
 
     <div class="version-block">
+        <h2 class="version-title">Version 1.6.8 <span class="version-date">Août 2026</span></h2>
+        <ul class="changelog-list">
+            <li><span class="badge-new">Nouveauté</span> <strong>Qualification de l'origine géographique :</strong> Création d'un nouvel indicateur de proximité (Alliance Locale < 100km, Régionale < 150km, Nationale, Internationale) stocké en base de données. Cet indicateur est évalué automatiquement à l'aide d'un algorithme croisant la distance kilométrique et l'analyse textuelle de l'adresse (détection des pays étrangers et codes postaux).</li>
+            <li><span class="badge-opt">Optimisation</span> <strong>Maintenance Origine Géo :</strong> Ajout du bouton "Maj Origines Géo" dans le menu de traitements pour calculer et sauvegarder cet indicateur sur l'intégralité de l'historique existant.</li>
+        </ul>
+    </div>
+    
+    <div class="version-block">
         <h2 class="version-title">Version 1.6.7 <span class="version-date">Août 2026</span></h2>
         <ul class="changelog-list">
             <li><span class="badge-opt">Optimisation</span> <strong>Ergonomie Menu & GPS :</strong> Le menu d'actions a été restructuré avec des sous-menus latéraux (Imports, Exports, Traitements) fonctionnels. Le badge d'anomalie GPS est désormais cliquable pour recalculer uniquement l'entité ciblée.</li>
             <li><span class="badge-fix">Correction</span> <strong>Algorithme de Géocodage :</strong> Intégration d'un système intelligent (<code>geocodeSmarter</code>) qui simplifie automatiquement les adresses complexes (bâtiments, zones industrielles, adresses étrangères) en cas d'échec initial, garantissant une meilleure résolution des distances internationales.</li>
         </ul>
     </div>
-    
+
     <div class="version-block">
         <h2 class="version-title">Version 1.6.63 <span class="version-date">Août 2026</span></h2>
         <ul class="changelog-list">
