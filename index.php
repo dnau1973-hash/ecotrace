@@ -1,6 +1,6 @@
 <?php
 /**
- * EcoTrace 🍃 - Version 1.6.63
+ * EcoTrace 🍃 - Version 1.6.7
  * 
  * Copyright (C) 2026 David NAU <dnau.1973@gmail.com>
  * 
@@ -79,7 +79,7 @@ if (!file_exists($envFile) || $is_editing_config) {
     <body>
         <div class="install-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.6.63</div>
+            <div class="app-version">Version 1.6.7</div>
             <p style="text-align:center; color:#666;"><?= $is_editing_config ? "Modification des paramètres de configuration." : "Veuillez configurer les paramètres avant l'installation." ?></p>
             <form method="POST" action="?">
                 <input type="hidden" name="setup_env_action" value="1">
@@ -158,7 +158,7 @@ if (empty($_SESSION['ecotrace_logged_in'])) {
     <body>
         <div class="login-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.6.63</div>
+            <div class="app-version">Version 1.6.7</div>
             <p>Veuillez vous identifier</p>
             <?php if (isset($login_error)) echo "<div class='error'>$login_error</div>"; ?>
             <form method="POST">
@@ -307,7 +307,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_action'])) {
         ";
         $pdoServer->exec($sql);
 
-        // Import automatique NAF à l'installation
         $nafFile = __DIR__ . '/insee.codenaf.csv';
         if (file_exists($nafFile)) {
             $handle = fopen($nafFile, "r");
@@ -425,6 +424,50 @@ function geocoderAdresseOSM($adresse) {
     return null;
 }
 
+// Nouveauté 1.6.7 : Géocodage intelligent (Simplification de l'adresse en cas d'échec)
+function geocodeSmarter($adresse) {
+    if (empty(trim($adresse))) return null;
+    
+    // Tentative 1 : Adresse brute complète
+    $coords = geocoderAdresseOSM($adresse);
+    if ($coords) return $coords;
+    usleep(300000); // Pause pour éviter d'être bloqué par OSM
+
+    // Tentative 2 : Extraire uniquement le Code Postal et la Ville (fin de chaîne)
+    if (preg_match('/([0-9]{4,5})\s+(.*)$/', $adresse, $matches)) {
+        $coords = geocoderAdresseOSM(trim($matches[1] . ' ' . $matches[2]));
+        if ($coords) return $coords;
+        usleep(300000);
+    }
+
+    // Tentative 3 : Récupérer tout ce qui suit la dernière virgule
+    if (strpos($adresse, ',') !== false) {
+        $parts = explode(',', $adresse);
+        $coords = geocoderAdresseOSM(trim(end($parts)));
+        if ($coords) return $coords;
+        usleep(300000);
+    }
+
+    // Tentative 4 : Ne garder que les 3 derniers mots (ex: DUBLIN 2 IRLANDE)
+    $words = preg_split('/\s+/', trim($adresse));
+    if (count($words) > 3) {
+        $coords = geocoderAdresseOSM(implode(' ', array_slice($words, -3)));
+        if ($coords) return $coords;
+        usleep(300000);
+    }
+
+    // Tentative 5 : Ultime recours, le tout dernier mot (Pays)
+    if (count($words) > 0) {
+        $lastWord = end($words);
+        if (strlen($lastWord) > 3) {
+            $coords = geocoderAdresseOSM($lastWord);
+            if ($coords) return $coords;
+        }
+    }
+    
+    return null;
+}
+
 function calculerDistanceVolDOiseau($lat1, $lon1, $lat2, $lon2) {
     $earth_radius = 6371; $dLat = deg2rad($lat2 - $lat1); $dLon = deg2rad($lon2 - $lon1);
     $a = sin($dLat/2) * sin($dLat/2) + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon/2) * sin($dLon/2);
@@ -457,7 +500,7 @@ function getLibelleNafLocal($codeNaf) {
         } catch (Exception $e) {}
     }
     
-    $divs = ['01' => 'Agriculture et services annexes', '02' => 'Sylviculture', '03' => 'Pêche et aquaculture', '05' => 'Extraction de houille', '06' => 'Extraction d\'hydrocarbures', '07' => 'Extraction de minerais métalliques', '08' => 'Autres industries extractives', '09' => 'Services de soutien extractifs', '10' => 'Industrie alimentaire', '11' => 'Fabrication de boissons', '12' => 'Fabrication de produits à base de tabac', '13' => 'Fabrication de textiles', '14' => 'Industrie de l\'habillement', '15' => 'Industrie du cuir et de la chaussure', '16' => 'Travail du bois', '17' => 'Industrie du papier', '18' => 'Imprimerie', '19' => 'Cokéfaction et raffinage', '20' => 'Industrie chimique', '21' => 'Industrie pharmaceutique', '22' => 'Fabrication de produits en caoutchouc', '23' => 'Fabrication d\'autres produits minéraux non métalliques', '24' => 'Métallurgie', '25' => 'Fabrication de produits métalliques', '26' => 'Fabrication de produits informatiques et électroniques', '27' => 'Fabrication d\'équipements électriques', '28' => 'Fabrication de machines et équipements', '29' => 'Industrie automobile', '30' => 'Fabrication d\'autres matériels de transport', '31' => 'Fabrication de meubles', '32' => 'Autres industries manufacturières', '33' => 'Réparation et installation de machines', '35' => 'Production et distribution d\'électricité, gaz, vapeur', '36' => 'Captage, traitement et distribution d\'eau', '37' => 'Collecte et traitement des eaux usées', '38' => 'Collecte et traitement des déchets', '39' => 'Dépollution', '41' => 'Construction de bâtiments', '42' => 'Génie civil', '43' => 'Travaux de construction spécialisés', '45' => 'Commerce et réparation d\'automobiles', '46' => 'Commerce de gros', '47' => 'Commerce de détail', '49' => 'Transports terrestres', '50' => 'Transports par eau', '51' => 'Transports aériens', '52' => 'Entreposage et services logistiques', '53' => 'Activités de poste et de courrier', '55' => 'Hébergement', '56' => 'Restauration', '58' => 'Édition', '59' => 'Production de films, vidéo et musique', '60' => 'Programmation et diffusion', '61' => 'Télécommunications', '62' => 'Programmation et conseil en informatique', '63' => 'Services d\'information', '64' => 'Activités financières', '65' => 'Assurance', '66' => 'Activités auxiliaires de services financiers', '68' => 'Activités immobilières', '69' => 'Activités juridiques et comptables', '70' => 'Sièges sociaux et conseil de gestion', '71' => 'Architecture et ingénierie', '72' => 'Recherche-développement scientifique', '73' => 'Publicité et études de marché', '74' => 'Autres activités spécialisées, scientifiques et techniques', '75' => 'Activités vétérinaires', '77' => 'Location et location-bail', '78' => 'Activités liées à l\'emploi', '79' => 'Agences de voyage', '80' => 'Enquêtes et sécurité', '81' => 'Services relatifs aux bâtiments et paysagisme', '82' => 'Activités administratives de bureau', '84' => 'Administration publique', '85' => 'Enseignement', '86' => 'Santé humaine', '87' => 'Hébergement médico-social et social', '88' => 'Action sociale sans hébergement', '90' => 'Activités créatives, artistiques et de spectacle', '91' => 'Bibliothèques, archives et musées', '92' => 'Organisation de jeux de hasard', '93' => 'Activités sportives et récréatives', '94' => 'Organisations associatives', '95' => 'Réparation d\'ordinateurs et biens', '96' => 'Autres services personnels', '97' => 'Activités des ménages', '99' => 'Activités extraterritoriales'];
+    $divs = ['01' => 'Agriculture', '10' => 'Industrie alimentaire', '41' => 'Construction', '45' => 'Commerce auto', '46' => 'Commerce gros', '47' => 'Commerce détail', '49' => 'Transports', '55' => 'Hébergement', '56' => 'Restauration', '62' => 'Informatique'];
     return $divs[substr($cleanCode, 0, 2)] ?? "Secteur d'activité ($cleanCode)";
 }
 
@@ -496,6 +539,31 @@ function determinerSanteJuridique($entreprise) {
 // 5. REQUÊTES AJAX
 // =========================================================================
 
+// Nouveauté 1.6.7 : Maj Distance unitaire interactive
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_distance_unique') {
+    header('Content-Type: application/json');
+    $id = (int)($_POST['id'] ?? 0);
+    try {
+        $stmt = $pdo->prepare("SELECT id, siege_adresse FROM api_resultats WHERE id = :id LIMIT 1");
+        $stmt->execute([':id' => $id]);
+        $ent = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$ent) throw new Exception("Entité introuvable.");
+
+        $coords = geocodeSmarter($ent['siege_adresse']);
+        if ($coords) {
+            $dist = calculerDistance($origineLat, $origineLon, $coords['lat'], $coords['lon']);
+            $pdo->prepare("UPDATE api_resultats SET latitude = :lat, longitude = :lon, distance = :dist WHERE id = :id")
+                ->execute([':lat' => $coords['lat'], ':lon' => $coords['lon'], ':dist' => $dist, ':id' => $id]);
+            echo json_encode(['success' => true, 'message' => "Coordonnées mises à jour avec succès."]);
+        } else {
+            echo json_encode(['success' => false, 'message' => "Impossible de géolocaliser cette adresse, même en mode secours."]);
+        }
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_distances_manquantes') {
     header('Content-Type: application/json');
     try {
@@ -509,28 +577,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $adresse = trim($ent['siege_adresse'] ?? '');
             if (empty($adresse)) continue;
             
-            $fallback_geo = '';
-            if (preg_match('/([0-9]{5})\s+(.*)$/', $adresse, $matches)) {
-                $fallback_geo = trim($matches[1] . ' ' . $matches[2]);
-            } else {
-                $fallback_geo = $adresse;
-            }
-            
-            usleep(1000000); 
-            $coords = geocoderAdresseOSM($fallback_geo);
-            
+            $coords = geocodeSmarter($adresse);
             if ($coords) {
-                $lat = $coords['lat'];
-                $lon = $coords['lon'];
-                $dist = calculerDistance($origineLat, $origineLon, $lat, $lon);
-                $stmtUpdate->execute([':lat' => $lat, ':lon' => $lon, ':dist' => $dist, ':id' => $ent['id']]);
+                $dist = calculerDistance($origineLat, $origineLon, $coords['lat'], $coords['lon']);
+                $stmtUpdate->execute([':lat' => $coords['lat'], ':lon' => $coords['lon'], ':dist' => $dist, ':id' => $ent['id']]);
                 $count++;
             }
         }
         
         $reste = $pdo->query("SELECT COUNT(id) FROM api_resultats WHERE (latitude IS NULL OR longitude IS NULL OR distance IS NULL) AND siege_adresse IS NOT NULL AND siege_adresse != ''")->fetchColumn();
-        
-        echo json_encode(['success' => true, 'message' => "✅ $count entité(s) localisée(s) via leur ville.\nIl reste environ $reste entité(s) sans coordonnées."]);
+        echo json_encode(['success' => true, 'message' => "✅ $count entité(s) localisée(s) avec succès.\nIl reste environ $reste entité(s) sans coordonnées."]);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'message' => "Erreur : " . $e->getMessage()]);
     }
@@ -686,11 +742,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $nom = trim($_POST['nom_complet'] ?? ''); $siren = trim($_POST['siren'] ?? ''); $naf = trim($_POST['naf'] ?? ''); $adresse = trim($_POST['adresse'] ?? ''); $statut_juridique = trim($_POST['statut_juridique'] ?? 'Actif');
     $latitude = !empty($_POST['latitude']) ? (float)$_POST['latitude'] : null; $longitude = !empty($_POST['longitude']) ? (float)$_POST['longitude'] : null; $distance = !empty($_POST['distance']) ? (float)$_POST['distance'] : null;
     
-    $fallback_geo = preg_match('/([0-9]{5})\s+(.*)$/', $adresse, $matches) ? trim($matches[1] . ' ' . $matches[2]) : null;
-
     if (empty($latitude) || empty($longitude)) { 
-        $coords = geocoderAdresseOSM($adresse); 
-        if (!$coords && $fallback_geo) { $coords = geocoderAdresseOSM($fallback_geo); }
+        $coords = geocodeSmarter($adresse); 
         if ($coords) { $latitude = $coords['lat']; $longitude = $coords['lon']; } 
     }
     if ($latitude && $longitude && empty($distance)) $distance = calculerDistance($origineLat, $origineLon, $latitude, $longitude);
@@ -746,16 +799,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $stmtInsertResult = $pdo->prepare("INSERT INTO api_resultats (source_id, siren, nom_complet, activite_principale, activite_principale_libelle, est_alimentaire, est_ess, est_societe_mission, statut_juridique, siege_adresse, latitude, longitude, distance) VALUES (:source_id, :siren, :nom_complet, :activite_principale, :activite_principale_libelle, :est_alimentaire, :est_ess, :est_mission, :statut_juridique, :siege_adresse, :latitude, :longitude, :distance)");
             foreach ($resultats as $entreprise) {
                 $act = (string)($entreprise['activite_principale'] ?? '');
-                $lat = $entreprise['siege']['latitude'] ?? null; $lon = $entreprise['siege']['longitude'] ?? null;
                 $adresse = trim(($entreprise['siege']['adresse'] ?? ''));
-                
-                $cp = trim($entreprise['siege']['code_postal'] ?? '');
-                $ville = trim($entreprise['siege']['libelle_commune'] ?? '');
-                $fallback_geo = ($cp && $ville) ? "$cp $ville" : null;
+                $lat = $entreprise['siege']['latitude'] ?? null; 
+                $lon = $entreprise['siege']['longitude'] ?? null;
 
                 if (empty($lat) || empty($lon)) { 
-                    $coords = geocoderAdresseOSM($adresse); 
-                    if (!$coords && $fallback_geo) { $coords = geocoderAdresseOSM($fallback_geo); }
+                    $coords = geocodeSmarter($adresse); 
                     if ($coords) { $lat = $coords['lat']; $lon = $coords['lon']; } 
                 }
 
@@ -800,14 +849,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             foreach(array_slice($raw_results, 0, 5) as $ent) {
                 $cp = trim($ent['siege']['code_postal'] ?? '');
                 $ville = trim($ent['siege']['ville'] ?? '');
-                $fallback_geo = ($cp && $ville) ? "$cp $ville" : null;
-                
+                $adresse = trim(($ent['siege']['adresse_ligne_1'] ?? '') . ' ' . $cp . ' ' . $ville);
+
                 $entreprises_trouvees[] = [
                     'siren' => $ent['siren'] ?? null, 'nom_complet' => $ent['nom_entreprise'] ?? $ent['denomination'] ?? 'Nom inconnu', 'activite_principale' => $ent['code_naf'] ?? null,
-                    'adresse' => trim(($ent['siege']['adresse_ligne_1'] ?? '') . ' ' . $cp . ' ' . $ville),
+                    'adresse' => $adresse,
                     'latitude' => $ent['siege']['latitude'] ?? null, 'longitude' => $ent['siege']['longitude'] ?? null, 'etat_administratif' => ($ent['entreprise_cessee'] ?? false) ? 'C' : 'A',
-                    'est_ess' => ($ent['entreprise_ess'] ?? false) ? 1 : 0, 'est_mission' => ($ent['societe_a_mission'] ?? false) ? 1 : 0,
-                    'fallback_geo' => $fallback_geo
+                    'est_ess' => ($ent['entreprise_ess'] ?? false) ? 1 : 0, 'est_mission' => ($ent['societe_a_mission'] ?? false) ? 1 : 0
                 ];
             }
         }
@@ -823,13 +871,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             foreach(array_slice($raw_results, 0, 5) as $ent) {
                 $org = $ent['organization'] ?? [];
                 $adresse = $org['full_address'] ?? null;
-                $fallback_geo = ($adresse && preg_match('/([0-9]{5})\s+(.*)$/', $adresse, $matches)) ? trim($matches[1] . ' ' . $matches[2]) : null;
                 
                 $entreprises_trouvees[] = [
                     'siren' => $org['siren'] ?? null, 'nom_complet' => $org['name'] ?? 'Nom inconnu', 'activite_principale' => $org['naf'] ?? null,
                     'adresse' => $adresse, 'latitude' => null, 'longitude' => null, 
                     'etat_administratif' => ($org['status'] ?? 'A') === 'radiation' ? 'C' : 'A',
-                    'est_ess' => 0, 'est_mission' => 0, 'fallback_geo' => $fallback_geo
+                    'est_ess' => 0, 'est_mission' => 0
                 ];
             }
         }
@@ -841,15 +888,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         if ($reponse) {
             $donneesJSON = json_decode($reponse, true); $raw_results = $donneesJSON['results'] ?? [];
             foreach(array_slice($raw_results, 0, 5) as $ent) {
-                $cp = trim($ent['siege']['code_postal'] ?? '');
-                $ville = trim($ent['siege']['libelle_commune'] ?? '');
-                $fallback_geo = ($cp && $ville) ? "$cp $ville" : null;
                 
                 $entreprises_trouvees[] = [
                     'siren' => $ent['siren'] ?? null, 'nom_complet' => $ent['nom_complet'] ?? null, 'activite_principale' => $ent['activite_principale'] ?? null,
                     'adresse' => $ent['siege']['adresse'] ?? null, 'latitude' => $ent['siege']['latitude'] ?? null, 'longitude' => $ent['siege']['longitude'] ?? null, 'etat_administratif' => $ent['etat_administratif'] ?? 'A',
-                    'est_ess' => ($ent['complements']['est_ess'] ?? false) ? 1 : 0, 'est_mission' => ($ent['complements']['est_societe_mission'] ?? false) ? 1 : 0,
-                    'fallback_geo' => $fallback_geo
+                    'est_ess' => ($ent['complements']['est_ess'] ?? false) ? 1 : 0, 'est_mission' => ($ent['complements']['est_societe_mission'] ?? false) ? 1 : 0
                 ];
             }
         }
@@ -870,11 +913,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $lat = $entreprise['latitude'] ?? null; 
         $lon = $entreprise['longitude'] ?? null; 
         $adresse = $entreprise['adresse'] ?? null;
-        $fallback_geo = $entreprise['fallback_geo'] ?? null;
         
         if (empty($lat) || empty($lon)) { 
-            $coords = geocoderAdresseOSM($adresse); 
-            if (!$coords && $fallback_geo) { $coords = geocoderAdresseOSM($fallback_geo); }
+            $coords = geocodeSmarter($adresse); 
             if ($coords) { $lat = $coords['lat']; $lon = $coords['lon']; } 
         }
         $dist = ($lat && $lon) ? calculerDistance($origineLat, $origineLon, $lat, $lon) : null;
@@ -961,7 +1002,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         .dropdown { position: relative; display: inline-block; }
         .dropbtn { background-color: #34495e; color: white; padding: 10px 15px; font-size: 14px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-family: 'Nunito', sans-serif;}
         .dropbtn:hover { background-color: #2c3e50; }
-        .dropdown-content { display: none; position: absolute; right: 0; background-color: #ffffff; min-width: 260px; white-space: nowrap; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); z-index: 1000; border-radius: 4px; overflow: hidden; }
+        .dropdown-content { display: none; position: absolute; right: 0; background-color: #ffffff; min-width: 260px; white-space: nowrap; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); z-index: 1000; border-radius: 4px; overflow: visible; }
         .dropdown-content a, .dropdown-content button { color: #333; padding: 12px 16px; text-decoration: none; display: block; width: 100%; text-align: left; border: none; background: none; cursor: pointer; font-size: 14px; border-bottom: 1px solid #eee; box-sizing: border-box; font-family: 'Nunito', sans-serif;}
         .dropdown-content button:last-child { border-bottom: none; }
         .dropdown-content a:hover, .dropdown-content button:hover { background-color: #f1f1f1; }
@@ -969,7 +1010,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
 
         .dropdown-submenu { position: relative; display: block; width: 100%; }
         .dropdown-submenu > button::after { content: " ▸"; float: right; opacity: 0.6; font-size: 12px; margin-top: 2px;}
-        .dropdown-submenu .dropdown-content-sub { display: none; position: absolute; right: 100%; top: 0; margin-right: 1px; background-color: #ffffff; min-width: 260px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); border-radius: 4px; overflow: hidden; z-index: 1001; border: 1px solid #eee; }
+        .dropdown-submenu .dropdown-content-sub { display: none; position: absolute; right: 100%; top: 0; margin-right: 1px; background-color: #ffffff; min-width: 260px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); border-radius: 4px; overflow: visible; z-index: 1001; border: 1px solid #eee; }
         .dropdown-submenu:hover .dropdown-content-sub { display: block; }
         .dropdown-content-sub a, .dropdown-content-sub button { color: #333; padding: 12px 16px; text-decoration: none; display: block; width: 100%; text-align: left; border: none; background: none; cursor: pointer; font-size: 14px; border-bottom: 1px solid #eee; box-sizing: border-box; font-family: 'Nunito', sans-serif; }
         .dropdown-content-sub button:last-child, .dropdown-content-sub a:last-child { border-bottom: none; }
@@ -1058,7 +1099,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         <div class="header-top">
             <div class="header-title">
                 <h1>EcoTrace 🍃</h1>
-                <div class="app-version-main">v1.6.63</div>
+                <div class="app-version-main">v1.6.7</div>
                 <div id="update-badge" class="update-badge" onclick="verifierMiseAJour()">⚠️ Mise à jour disponible !</div>
             </div>
             <div class="header-actions">
@@ -1266,7 +1307,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                                         <span class="sante-badge <?= $sClass ?>" style="margin-left: 8px;" onclick="voirAnnonceSante('<?= $valide['siren'] ?>', '<?= htmlspecialchars(addslashes($valide['nom_complet'] ?? '')) ?>')" title="Cliquer pour voir les détails juridiques officiels"><?= htmlspecialchars($sJ) ?> 🔍</span>
                                         
                                         <?php if (empty($valide['distance']) || $valide['distance'] <= 0): ?>
-                                            <span class="badge badge-red" style="margin-left: 8px; background-color: #c0392b; cursor: pointer;" title="Cliquez ici pour calculer la distance via la ville" onclick="lancerMajAjax('update_distances_manquantes', this)">⚠️ Anomalie GPS</span>
+                                            <span class="badge badge-red" style="margin-left: 8px; background-color: #c0392b; cursor: pointer;" title="Cliquez ici pour recalculer uniquement cette distance" onclick="lancerMajAjaxDistUnique(<?= $valide['resultat_id'] ?>, this)">⚠️ Anomalie GPS</span>
                                         <?php endif; ?>
                                         <br>
                                         
@@ -1437,6 +1478,31 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         window.addEventListener('beforeunload', function() {
             sessionStorage.setItem('scrollPositionEcotrace', window.scrollY);
         });
+
+        // Nouveauté 1.6.7 : Maj de la distance pour une seule entité (Badge Anomalie GPS)
+        async function lancerMajAjaxDistUnique(id, btn) {
+            let originalText = btn.innerHTML;
+            btn.innerHTML = "⏳...";
+            btn.style.pointerEvents = "none";
+            let f = new FormData();
+            f.append('action', 'update_distance_unique');
+            f.append('id', id);
+            try {
+                let r = await fetch('', {method: 'POST', body: f});
+                let d = await r.json();
+                if(d.success) {
+                    location.reload();
+                } else {
+                    alert(d.message);
+                    btn.innerHTML = originalText;
+                    btn.style.pointerEvents = "auto";
+                }
+            } catch(e) {
+                alert("Erreur de connexion.");
+                btn.innerHTML = originalText;
+                btn.style.pointerEvents = "auto";
+            }
+        }
 
         function filtrerRapprochement() { let input = document.getElementById('filterMatchingInput').value.toLowerCase(); let cards = document.getElementById('tab-matching').getElementsByClassName('card-matching'); for (let i = 0; i < cards.length; i++) { let title = cards[i].getElementsByClassName('source-title')[0]; cards[i].style.display = (title && (title.textContent || title.innerText).toLowerCase().indexOf(input) > -1) ? "" : "none"; } }
         function filtrerValidees() { let input = document.getElementById('filterValideesInput').value.toLowerCase(); let table = document.getElementById('table-validees'); if (!table) return; let tr = table.getElementsByTagName('tr'); for (let i = 1; i < tr.length; i++) { tr[i].style.display = ((tr[i].textContent || tr[i].innerText).toLowerCase().indexOf(input) > -1) ? "" : "none"; } }
