@@ -1,6 +1,6 @@
 <?php
 /**
- * EcoTrace 🍃 - Version 1.6.61
+ * EcoTrace 🍃 - Version 1.6.62
  * 
  * Copyright (C) 2026 David NAU <dnau.1973@gmail.com>
  * 
@@ -80,7 +80,7 @@ if (!file_exists($envFile) || $is_editing_config) {
     <body>
         <div class="install-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.6.61</div>
+            <div class="app-version">Version 1.6.62</div>
             <p style="text-align:center; color:#666;"><?= $is_editing_config ? "Modification des paramètres de configuration." : "Veuillez configurer les paramètres avant l'installation." ?></p>
             <form method="POST" action="?">
                 <input type="hidden" name="setup_env_action" value="1">
@@ -159,7 +159,7 @@ if (empty($_SESSION['ecotrace_logged_in'])) {
     <body>
         <div class="login-box">
             <h1>EcoTrace 🍃</h1>
-            <div class="app-version">Version 1.6.61</div>
+            <div class="app-version">Version 1.6.62</div>
             <p>Veuillez vous identifier</p>
             <?php if (isset($login_error)) echo "<div class='error'>$login_error</div>"; ?>
             <form method="POST">
@@ -517,7 +517,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $fallback_geo = $adresse;
             }
             
-            usleep(1000000); // Pause obligatoire de 1 sec pour respecter les CGU OpenStreetMap
+            usleep(1000000); 
             $coords = geocoderAdresseOSM($fallback_geo);
             
             if ($coords) {
@@ -906,6 +906,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 $sourcesEnAttente = $pdo->query("SELECT * FROM sources_csv WHERE statut = 'en_attente' ORDER BY id DESC LIMIT 1000")->fetchAll(PDO::FETCH_ASSOC);
 $sourcesIntrouvables = $pdo->query("SELECT * FROM sources_csv WHERE statut = 'introuvable' ORDER BY id DESC LIMIT 1000")->fetchAll(PDO::FETCH_ASSOC);
 
+// Jointure NAF dynamique (LEFT JOIN) pour l'affichage de l'historique
 $sourcesValides = $pdo->query("
     SELECT s.id as source_id, s.nom_recherche, s.statut, s.date_import, s.montant, s.poids,
            r.id as resultat_id, r.siren, r.nom_complet, r.siege_adresse, r.latitude, r.longitude, r.distance, 
@@ -1020,6 +1021,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         .close-modal { color: #aaa; font-size: 28px; font-weight: bold; cursor: pointer; line-height: 1; }
         .close-modal:hover { color: #333; }
         
+        /* Highlight SIREN matching persisté */
         tr.highlight-siren > td { background-color: #d1f2eb !important; border-top: 2px solid #1abc9c; border-bottom: 2px solid #1abc9c; }
         
         /* Formulaires alignés */
@@ -1051,7 +1053,7 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
         <div class="header-top">
             <div class="header-title">
                 <h1>EcoTrace 🍃</h1>
-                <div class="app-version-main">v1.6.61</div>
+                <div class="app-version-main">v1.6.62</div>
                 <div id="update-badge" class="update-badge" onclick="verifierMiseAJour()">⚠️ Mise à jour disponible !</div>
             </div>
             <div class="header-actions">
@@ -1238,9 +1240,9 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                                         <strong><?= htmlspecialchars($valide['nom_complet'] ?? '') ?></strong>
                                         <span class="sante-badge <?= $sClass ?>" style="margin-left: 8px;" onclick="voirAnnonceSante('<?= $valide['siren'] ?>', '<?= htmlspecialchars(addslashes($valide['nom_complet'] ?? '')) ?>')" title="Cliquer pour voir les détails juridiques officiels"><?= htmlspecialchars($sJ) ?> 🔍</span>
                                         
-                                        <!-- Nouveauté 1.6.61 : Indicateur visuel d'anomalie de distance -->
+                                        <!-- Nouveauté 1.6.62 : Indicateur visuel cliquable d'anomalie de distance -->
                                         <?php if (empty($valide['distance']) || $valide['distance'] <= 0): ?>
-                                            <span class="badge badge-red" style="margin-left: 8px; background-color: #c0392b;" title="Aucune distance calculée : utilisez le bouton Maj Distances (Villes)">⚠️ Anomalie GPS</span>
+                                            <span class="badge badge-red" style="margin-left: 8px; background-color: #c0392b; cursor: pointer;" title="Cliquez ici pour calculer la distance via la ville" onclick="lancerMajAjax('update_distances_manquantes', this)">⚠️ Anomalie GPS</span>
                                         <?php endif; ?>
                                         <br>
                                         
@@ -1260,7 +1262,6 @@ arsort($statsSecteurs); $topSecteurs = array_slice($statsSecteurs, 0, 5, true);
                                     <td style="text-align: center;">
                                         <strong style="color:#d35400; font-size:16px;"><?= estimerCO2($valide['activite_principale'], $valide['montant'], $valide['poids'], $valide['distance']) ?> kg</strong><br>
                                         
-                                        <!-- Affichage de la distance rouge si manquante -->
                                         <?php if(empty($valide['distance']) || $valide['distance'] <= 0): ?>
                                             <span class="text-muted" style="color: #e74c3c; font-weight: bold;">⚠️ Dist. inconnue</span><br>
                                         <?php else: ?>
